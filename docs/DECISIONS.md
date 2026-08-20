@@ -11,6 +11,8 @@ row citing the one it replaces.
 | D-003 | Identifiers are **UUIDv7**, stored as canonical lowercase `TEXT` | 2026-08-20 | every migration |
 | D-004 | All three roles — owner, manager, staff — exist at go-live | 2026-08-20 | TASKS 0.6 |
 | D-005 | Instants are UTC `INTEGER`; `business_date` and `book_year` are denormalised at write time in entity-local time | 2026-08-20 | every dated table |
+| D-006 | The product catalogue is **shared across entities**; stock is what is entity-scoped | 2026-08-20 | migration 001, Phase 4 |
+| D-007 | Every table is `STRICT` | 2026-08-20 | every migration |
 
 ---
 
@@ -117,3 +119,42 @@ database `time.LoadLocation("Asia/Jakarta")` fails, the fallback is UTC, and a
 23:30 WIB sale on 31 December books into the following year — silently, once a
 year, in the figure the omzet alarm reads. Costs ~450KB and keeps the deploy one
 file. TASKS 7.3 is the test.
+
+## D-006 — One product catalogue, entity-scoped stock
+
+**This departs from the ER in ARCHITECTURE §3**, which draws
+`LEGAL_ENTITY ||--o{ PRODUCT : owns`. Flagging it rather than quietly diverging.
+
+The alternative is a product row per entity. Then an inter-company transfer of
+product X from entity A to entity B has to bridge A's row to B's row, and the
+only thing to match them on is `code`. That bridge is a permanent source of
+drift: the two rows can disagree on name, unit, or barcode; a typo in a code
+silently breaks a transfer or, worse, transfers into the wrong product. Phase 4
+exists precisely because Olsera's inter-company stock movement is broken and the
+user's quantities are drifting from reality today — founding it on a fuzzy
+string match would reproduce the bug we are being paid to fix.
+
+With a shared catalogue, a transfer is: consume layers where `entity_id = A`,
+create a layer where `entity_id = B`, same `product_id`, same `owner_id`. There
+is nothing to match and nothing to drift. Note `stock_layer` already carries its
+own `entity_id` in SPEC §3.1, which only makes sense if the product does not.
+
+**What this defers.** Per-entity selling prices. The PKP entity's shelf prices
+should be PPN-inclusive while the non-PKP entity's are not (REQUIREMENTS §4), so
+a single `product.sale_price_idr` will not hold forever. That is an additive
+`product_entity_price` table when Phase 5 needs it — cheap, because the product
+identity it hangs off is already stable. Building it now would be speculative;
+building the transfer bridge now would be a mistake.
+
+R11.1 lists one selling price, so this matches the requirement as written.
+
+## D-007 — STRICT tables
+
+Every table is declared `STRICT`. SQLite's default type affinity will store the
+text `'abc'` or the float `1000.5` in a column declared `INTEGER` and say
+nothing. STRICT rejects both at the storage layer.
+
+That turns INV-1 from a convention the code is expected to honour into something
+the database refuses to violate — including through a hand-written `INSERT` in a
+`sqlite3` shell during a support session, which is exactly when the convention
+would otherwise be forgotten.
