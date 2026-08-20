@@ -85,11 +85,14 @@ func run() error {
 		logger.Warn("gagal membersihkan klaim tertunda", "error", err)
 	}
 
+	master := service.NewMasterData(db, service.NewAuditor(time.Now), time.Now)
+
 	srv := terahttp.New(terahttp.Config{
 		Addr:         addr,
 		DB:           db,
 		Auth:         auth,
 		Idem:         idem,
+		Master:       master,
 		Logger:       logger,
 		CookieSecure: os.Getenv("TERA_COOKIE_SECURE") == "1",
 	})

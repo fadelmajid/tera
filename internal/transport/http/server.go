@@ -40,6 +40,7 @@ type Config struct {
 	DB     Checker
 	Auth   *service.Auth
 	Idem   *service.Idempotency
+	Master *service.MasterData
 	Logger *slog.Logger
 
 	// CookieSecure marks the session cookie Secure. Off by default: the shop
@@ -115,6 +116,8 @@ func Handler(cfg Config) stdhttp.Handler {
 				r.Use(requireAuth)
 				r.Get("/auth/me", handleMe())
 			})
+
+			mountMasterData(r, cfg)
 		}
 	})
 

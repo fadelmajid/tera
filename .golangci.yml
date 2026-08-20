@@ -101,6 +101,18 @@ linters:
         - performance
       disabled-checks:
         - whyNoLint
+      settings:
+        # gocritic's defaults flag an 80-byte struct passed by value. That is
+        # tuned for hot paths; this system handles under 1,000 transactions a
+        # day against 1,000 SKUs, where copying a 128-byte record is free and
+        # unmeasurable. Value semantics are the safer default for the request
+        # and row types being copied here — no aliasing, no nil to check — so
+        # the threshold is raised rather than the code contorted. Genuinely
+        # large structures still get flagged.
+        hugeParam:
+          sizeThreshold: 256
+        rangeValCopy:
+          sizeThreshold: 256
 
     gosec:
       excludes:

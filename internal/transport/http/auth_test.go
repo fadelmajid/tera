@@ -8,6 +8,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,17 +21,24 @@ import (
 // client keeps a cookie jar so a login carries into later requests, the way a
 // browser on the shop LAN does.
 type client struct {
-	t  *testing.T
-	hc *stdhttp.Client
-	ur string
+	t    *testing.T
+	hc   *stdhttp.Client
+	ur   string
+	auth *service.Auth
+	q    *gen.Queries
+	ctx  context.Context
 }
 
-func newClient(t *testing.T) (*client, *service.Auth, *gen.Queries, context.Context) {
+func (c *client) deps() (*client, *service.Auth, *gen.Queries, context.Context) {
+	return c, c.auth, c.q, c.ctx
+}
+
+func newClient(t *testing.T) (c *client, auth *service.Auth, q *gen.Queries, ctx context.Context) {
 	t.Helper()
 
 	// Real bcrypt cost here: this test exercises the production path end to
 	// end, and a handful of hashes is a second well spent.
-	ctx := context.Background()
+	ctx = context.Background()
 	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "tera.db"))
 	if err != nil {
 		t.Fatalf("open: %v", err)
@@ -40,32 +48,82 @@ func newClient(t *testing.T) (*client, *service.Auth, *gen.Queries, context.Cont
 		t.Fatalf("migrate: %v", err)
 	}
 
-	auth := service.NewAuth(db, time.Now)
-	srv := httptest.NewServer(terahttp.Handler(terahttp.Config{DB: db, Auth: auth}))
+	auth = service.NewAuth(db, time.Now)
+	srv := httptest.NewServer(terahttp.Handler(terahttp.Config{
+		DB:     db,
+		Auth:   auth,
+		Idem:   service.NewIdempotency(db, time.Now),
+		Master: service.NewMasterData(db, service.NewAuditor(time.Now), time.Now),
+	}))
 	t.Cleanup(srv.Close)
 
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatalf("cookiejar: %v", err)
 	}
-	return &client{t: t, hc: &stdhttp.Client{Jar: jar}, ur: srv.URL}, auth, gen.New(db), ctx
+
+	c = &client{t: t, hc: &stdhttp.Client{Jar: jar}, ur: srv.URL, auth: auth, q: gen.New(db), ctx: ctx}
+	return c, auth, c.q, ctx
+}
+
+// setupEntity gets a caller to the state every entity-scoped test needs: a
+// logged-in owner of one company.
+func setupEntity(t *testing.T) (c *client, entityID string) {
+	t.Helper()
+
+	c, auth, _, ctx := newClient(t)
+	if _, err := auth.CreateUser(ctx, "budi", "Budi", "rahasia-panjang"); err != nil {
+		t.Fatalf("user: %v", err)
+	}
+	if got := c.send(stdhttp.MethodPost, "/api/v1/auth/login",
+		map[string]string{"username": "budi", "password": "rahasia-panjang"}, nil); got.status != stdhttp.StatusOK {
+		t.Fatalf("login: %d %s", got.status, got.body)
+	}
+
+	got := c.send(stdhttp.MethodPost, "/api/v1/setup/entity", map[string]any{
+		"code": "PKP", "name": "PT Sehat Sentosa", "is_pkp": true,
+		"timezone": "Asia/Jakarta", "book_year_start_month": 1,
+	}, nil)
+	if got.status != stdhttp.StatusCreated {
+		t.Fatalf("setup: %d %s", got.status, got.body)
+	}
+
+	var entity struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(got.body), &entity); err != nil {
+		t.Fatalf("decode entity: %v", err)
+	}
+	return c, entity.ID
 }
 
 func (c *client) send(method, path string, body any, headers map[string]string) response {
 	c.t.Helper()
 
-	var buf bytes.Buffer
+	var raw string
 	if body != nil {
-		if err := json.NewEncoder(&buf).Encode(body); err != nil {
+		encoded, err := json.Marshal(body)
+		if err != nil {
 			c.t.Fatalf("encode: %v", err)
 		}
+		raw = string(encoded)
 	}
+	return c.sendRaw(method, path, raw, headers)
+}
 
-	req, err := stdhttp.NewRequestWithContext(context.Background(), method, c.ur+path, &buf)
+// sendRaw posts a body verbatim, so a test can send JSON Go would never
+// produce — a fractional rupiah, for instance (INV-1).
+func (c *client) sendRaw(method, path, body string, headers map[string]string) response {
+	c.t.Helper()
+
+	req, err := stdhttp.NewRequestWithContext(context.Background(), method, c.ur+path, strings.NewReader(body))
 	if err != nil {
 		c.t.Fatalf("request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if method != stdhttp.MethodGet {
+		req.Header.Set(terahttp.ClientRequestHeader, store.NewID())
+	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
