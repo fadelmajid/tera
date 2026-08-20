@@ -1,0 +1,150 @@
+/* Tera — a shop-floor UI. Large targets, high contrast, no decoration.
+   The cashier uses this all day under fluorescent light; the owner reads
+   margin figures on a phone. Both matter more than looking modern. */
+
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --border: #d8dce3;
+  --text: #16191f;
+  --muted: #5b6572;
+  --accent: #14562f;
+  --accent-text: #ffffff;
+  --danger: #9b1c1c;
+  --danger-bg: #fdeaea;
+  --warn-bg: #fff6e0;
+  --warn-border: #e2b04a;
+  --radius: 8px;
+  --pad: 16px;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171c;
+    --surface: #1c2027;
+    --border: #333a45;
+    --text: #eef1f5;
+    --muted: #9aa4b2;
+    --accent: #3fa16a;
+    --accent-text: #07120b;
+    --danger: #f8a5a5;
+    --danger-bg: #3a1c1c;
+    --warn-bg: #3a3020;
+    --warn-border: #8a6c2a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Rupiah figures line up in columns and never reflow as digits change. */
+.angka {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.app { display: flex; min-height: 100vh; }
+
+.sidebar {
+  width: 220px;
+  flex: 0 0 220px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: var(--pad);
+}
+
+.sidebar h1 { font-size: 20px; margin: 0 0 4px; }
+.sidebar .entity { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+.sidebar nav { display: flex; flex-direction: column; gap: 2px; }
+
+.sidebar nav a {
+  display: block;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  color: var(--text);
+  text-decoration: none;
+}
+.sidebar nav a:hover { background: var(--bg); }
+.sidebar nav a.active { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+
+.main { flex: 1; padding: 24px; min-width: 0; }
+.main h2 { margin-top: 0; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--pad);
+}
+
+label { display: block; margin-bottom: 12px; }
+label span { display: block; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
+
+input, select, button, textarea {
+  font: inherit;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  width: 100%;
+}
+
+button {
+  background: var(--accent);
+  color: var(--accent-text);
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  width: auto;
+  min-height: 44px;
+  padding: 10px 20px;
+}
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.sekunder { background: transparent; color: var(--text); border: 1px solid var(--border); }
+
+.galat {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+/* Compliance disclaimer. Required on every screen showing a tax figure,
+   threshold, or deadline — we are not tax advisors. */
+.disclaimer {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: var(--radius);
+  padding: 12px;
+  font-size: 14px;
+  margin-top: 20px;
+}
+
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; }
+th { font-size: 13px; color: var(--muted); font-weight: 600; }
+
+.masuk {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--pad);
+}
+.masuk .card { width: 100%; max-width: 380px; }
+.masuk h1 { margin: 0 0 4px; }
+.masuk p.sub { margin: 0 0 20px; color: var(--muted); }
+.masuk button { width: 100%; }
+
+.kosong { color: var(--muted); padding: 24px 0; }

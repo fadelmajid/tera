@@ -81,13 +81,13 @@ func (r Role) CanManageMasterData() bool { return r.AtLeast(RoleManager) }
 // CanManageUsers reports whether the role may create users and grant roles.
 func (r Role) CanManageUsers() bool { return r.AtLeast(RoleOwner) }
 
-// CanSeeAllOwnerMargin reports whether the role may see every owner's margin,
-// not just aggregate figures.
+// CanSeeAllOwnerMargin reports whether the role may see owner margin figures.
 //
-// R13.3 as written: staff "should not see other owners' margin figures", with
-// the requirement itself noting this needs confirming with the user. This
-// implements the requirement as written — the conservative reading — and the
-// question is still open. In a family business it is sensitive in both
-// directions, so it must be answered before the Phase 3 margin screen ships,
-// not defaulted to silently.
+// R13.3, confirmed by the user (D-009): owners and managers can, regular staff
+// cannot. A cashier is not one of the family members products are attributed
+// to, so "other owners' figures" is all of them — staff see no margin at all,
+// not a redacted version.
+//
+// This is an authority the query layer enforces, not the screen. A margin
+// figure that reaches the browser has already left the building.
 func (r Role) CanSeeAllOwnerMargin() bool { return r.AtLeast(RoleManager) }

@@ -118,14 +118,11 @@ func Handler(cfg Config) stdhttp.Handler {
 		}
 	})
 
-	// The SPA is embedded here in TASKS 0.9. Until then, a placeholder — in
-	// Bahasa Indonesia, because the UI is built in Indonesian from the start
-	// rather than translated later (R9.12).
-	r.Get("/", func(w stdhttp.ResponseWriter, _ *stdhttp.Request) {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(stdhttp.StatusOK)
-		_, _ = w.Write([]byte("Tera — server berjalan.\nAntarmuka belum dibangun (lihat docs/TASKS.md 0.9).\n"))
-	})
+	// The browser client, embedded in the binary. Registered last so the API
+	// routes above win; anything else is a client-side route.
+	spa := spaHandler(cfg.Logger)
+	r.Get("/", spa)
+	r.Get("/*", spa)
 
 	return r
 }

@@ -26,14 +26,19 @@ SQLC     ?= $(shell command -v sqlc 2>/dev/null || echo go run github.com/sqlc-d
 GOOSE    ?= $(shell command -v goose 2>/dev/null || echo go run github.com/pressly/goose/v3/cmd/goose@$(GOOSE_VERSION))
 
 .DEFAULT_GOAL := help
-.PHONY: help build run test test-race cover lint fmt vet tidy sqlc sqlc-vet \
+.PHONY: help web build release run test test-race cover lint fmt vet tidy sqlc sqlc-vet \
 	    migrate-up migrate-down migrate-status migrate-create ci clean
 
 help: ## List available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
-build: ## Build ./bin/tera
+web: ## Build the browser client into web/dist (embedded by the Go build)
+	cd web && npm ci --no-audit --no-fund && npm run build
+
+build: ## Build ./bin/tera (embeds whatever web/dist currently holds)
 	go build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY) ./cmd/tera
+
+release: web build ## Build the shippable binary: front end first, then embed it
 
 run: ## Run from source
 	go run ./cmd/tera

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	terahttp "github.com/fadelmajid/tera/internal/transport/http"
+	"github.com/fadelmajid/tera/web"
 )
 
 type fakeChecker struct {
@@ -171,13 +172,58 @@ func TestUnknownAPIEndpointReturnsJSON(t *testing.T) {
 }
 
 // UI copy is Bahasa Indonesia from the start, not English translated later
-// (R9.12). That applies to the placeholder too.
-func TestRootPlaceholderIsInIndonesian(t *testing.T) {
+// (R9.12) — including the fallback served when the binary was built without
+// running the front-end build.
+//
+// The branch is deliberate. `go test` without `make web` embeds nothing, and a
+// test that only passed in one of those two states would be a trap for whoever
+// runs the other. CI builds the front end, so the embedded path is the one it
+// exercises.
+func TestRootIsInIndonesian(t *testing.T) {
 	t.Parallel()
 
 	got := do(t, terahttp.Config{DB: fakeChecker{}}, stdhttp.MethodGet, "/")
-
-	if !strings.Contains(got.body, "berjalan") {
-		t.Errorf("root page is not in Indonesian: %q", got.body)
+	if got.status != stdhttp.StatusOK {
+		t.Fatalf("status = %d, want 200", got.status)
 	}
+
+	if _, embedded := web.Assets(); embedded {
+		if !strings.Contains(got.body, `lang="id"`) {
+			t.Errorf("the embedded page does not declare Indonesian: %q", first(got.body, 200))
+		}
+		return
+	}
+	if !strings.Contains(got.body, "berjalan") {
+		t.Errorf("the placeholder is not in Indonesian: %q", got.body)
+	}
+}
+
+// A staff member refreshing the page on a client-side route must get the app
+// back, not a 404.
+func TestClientSideRouteFallsBackToTheApp(t *testing.T) {
+	t.Parallel()
+
+	if _, embedded := web.Assets(); !embedded {
+		t.Skip("front end not built; run `make web`")
+	}
+
+	got := do(t, terahttp.Config{DB: fakeChecker{}}, stdhttp.MethodGet, "/produk/baru")
+	if got.status != stdhttp.StatusOK {
+		t.Fatalf("status = %d, want 200", got.status)
+	}
+	if !strings.Contains(got.body, `<div id="root">`) {
+		t.Error("a client-side route did not serve the app shell")
+	}
+	// index.html carries no content hash, so a cached copy would pin staff to
+	// an old build against a new API with nothing to purge and nobody to tell.
+	if cc := got.header.Get("Cache-Control"); cc != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store", cc)
+	}
+}
+
+func first(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
 }

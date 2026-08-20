@@ -26,6 +26,17 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # Build the front end first: the binary embeds it, and the SPA-serving
+      # tests should exercise what actually ships rather than the fallback.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: build web
+        run: cd web && npm ci --no-audit --no-fund && npm run build
+
       - name: go build
         run: go build ./...
 

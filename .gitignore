@@ -14,7 +14,12 @@
 
 # node / vite
 node_modules/
-web/dist/
+# The build output is embedded into the binary, so it is generated, not source.
+# .gitkeep stays: //go:embed fails at compile time on a pattern matching nothing,
+# so a fresh clone needs the directory to exist.
+web/dist/*
+!web/dist/.gitkeep
+*.tsbuildinfo
 
 # env
 .env

@@ -14,6 +14,7 @@ row citing the one it replaces.
 | D-006 | The product catalogue is **shared across entities**; stock is what is entity-scoped | 2026-08-20 | migration 001, Phase 4 |
 | D-007 | Every table is `STRICT` | 2026-08-20 | every migration |
 | D-008 | Server-side sessions over plain HTTP on the LAN; cookie `Secure` is opt-in | 2026-08-20 | auth, deployment |
+| D-009 | Owner and manager see owner margin figures; staff see none | 2026-08-20 | Phase 3, query layer |
 
 ---
 
@@ -186,3 +187,19 @@ point here rather than hiding it.
 
 Passwords are bcrypt at cost 12. An unknown username still pays for one bcrypt
 comparison, so login timing does not reveal which usernames exist.
+
+## D-009 — Who sees owner margin (R13.3, resolved)
+
+Owners and managers can see owner margin figures. Regular staff cannot — and
+cannot see a reduced version either. A cashier is not one of the family members
+products are attributed to, so "other owners' figures" means all of them.
+
+R13.3 flagged this as needing confirmation; the user confirmed it on 2026-08-20.
+
+**Enforced in the query layer, not the screen.** A margin figure that reaches the
+browser has already left the building, so hiding a table client-side is not the
+control. The margin endpoints refuse the request; the UI simply does not offer
+the menu item.
+
+This is a per-entity authority like every other (R13.4): a manager of the
+non-PKP entity sees that company's margin, not the PKP entity's.
