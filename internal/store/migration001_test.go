@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -22,17 +23,33 @@ func migrated(t *testing.T) (*store.DB, *gen.Queries, context.Context) {
 	return db, gen.New(db), ctx
 }
 
-func TestMigrateIsIdempotent(t *testing.T) {
+func TestMigrateAppliesEveryMigrationAndIsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	db, _, ctx := migrated(t)
+
+	// Counted from disk rather than hardcoded, so this asserts something real
+	// on every future migration instead of being a number to bump.
+	entries, err := os.ReadDir("migrations")
+	if err != nil {
+		t.Fatalf("read migrations dir: %v", err)
+	}
+	var want int
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".sql") {
+			want++
+		}
+	}
+	if want == 0 {
+		t.Fatal("no migration files found on disk")
+	}
 
 	first, err := db.Version(ctx)
 	if err != nil {
 		t.Fatalf("version: %v", err)
 	}
-	if first != 1 {
-		t.Errorf("schema version %d after migrating, want 1", first)
+	if first != int64(want) {
+		t.Errorf("schema version %d, want %d — the embedded FS and the migrations directory disagree", first, want)
 	}
 
 	if err := db.Migrate(ctx); err != nil {

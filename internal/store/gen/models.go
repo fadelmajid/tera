@@ -4,6 +4,16 @@
 
 package gen
 
+type AppUser struct {
+	ID           string
+	Username     string
+	FullName     string
+	PasswordHash string
+	IsActive     int64
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
 type Customer struct {
 	ID        string
 	Code      string
@@ -56,6 +66,14 @@ type Product struct {
 	UpdatedAt    int64
 }
 
+type Session struct {
+	TokenHash  string
+	UserID     string
+	CreatedAt  int64
+	LastSeenAt int64
+	ExpiresAt  int64
+}
+
 type Supplier struct {
 	ID           string
 	Code         string
@@ -67,4 +85,11 @@ type Supplier struct {
 	IsActive     int64
 	CreatedAt    int64
 	UpdatedAt    int64
+}
+
+type UserEntityRole struct {
+	UserID    string
+	EntityID  string
+	Role      string
+	CreatedAt int64
 }

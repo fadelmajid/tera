@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fadelmajid/tera/internal/service"
 	"github.com/fadelmajid/tera/internal/store"
 	terahttp "github.com/fadelmajid/tera/internal/transport/http"
 
@@ -69,7 +70,21 @@ func run() error {
 	}
 	logger.Info("database siap", "path", db.Path(), "schema_version", schema)
 
-	srv := terahttp.New(terahttp.Config{Addr: addr, DB: db, Logger: logger})
+	auth := service.NewAuth(db, time.Now)
+	if err := bootstrap(ctx, auth, logger); err != nil {
+		return err
+	}
+	if err := auth.PurgeExpiredSessions(ctx); err != nil {
+		logger.Warn("gagal membersihkan sesi kedaluwarsa", "error", err)
+	}
+
+	srv := terahttp.New(terahttp.Config{
+		Addr:         addr,
+		DB:           db,
+		Auth:         auth,
+		Logger:       logger,
+		CookieSecure: os.Getenv("TERA_COOKIE_SECURE") == "1",
+	})
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Start(ctx) }()
@@ -95,6 +110,22 @@ func run() error {
 	}
 
 	logger.Info("tera berhenti dengan bersih")
+	return nil
+}
+
+// bootstrap creates the first user on an empty database and prints the
+// generated password once. It is the only time a credential is ever logged.
+func bootstrap(ctx context.Context, auth *service.Auth, logger *slog.Logger) error {
+	username, password, created, err := auth.BootstrapAdmin(ctx)
+	if err != nil {
+		return err
+	}
+	if !created {
+		return nil
+	}
+
+	logger.Warn("pengguna pertama dibuat — catat kata sandi ini, tidak akan ditampilkan lagi",
+		"username", username, "password", password)
 	return nil
 }
 

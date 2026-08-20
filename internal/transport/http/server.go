@@ -12,6 +12,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/fadelmajid/tera/internal/service"
 )
 
 // DefaultAddr binds every interface.
@@ -36,7 +38,15 @@ type Checker interface {
 type Config struct {
 	Addr   string
 	DB     Checker
+	Auth   *service.Auth
 	Logger *slog.Logger
+
+	// CookieSecure marks the session cookie Secure. Off by default: the shop
+	// LAN is plain HTTP with no certificate authority, and a Secure cookie
+	// would simply never be sent, locking everyone out. See DECISIONS D-008 —
+	// this is a conscious trade, not an oversight. Turn it on if TLS is ever
+	// terminated in front of the server.
+	CookieSecure bool
 }
 
 // Server owns the HTTP listener and its lifecycle.
@@ -91,8 +101,18 @@ func Handler(cfg Config) stdhttp.Handler {
 	r.Get("/readyz", handleReady(cfg.DB, cfg.Logger))
 
 	r.Route("/api/v1", func(r chi.Router) {
-		// Handlers land from TASKS 0.6 onward.
+		r.Use(authenticate(cfg.Auth))
 		r.NotFound(notFoundJSON)
+
+		if cfg.Auth != nil {
+			r.Post("/auth/login", handleLogin(cfg.Auth, cfg.CookieSecure))
+			r.Post("/auth/logout", handleLogout(cfg.Auth, cfg.CookieSecure))
+
+			r.Group(func(r chi.Router) {
+				r.Use(requireAuth)
+				r.Get("/auth/me", handleMe())
+			})
+		}
 	})
 
 	// The SPA is embedded here in TASKS 0.9. Until then, a placeholder — in

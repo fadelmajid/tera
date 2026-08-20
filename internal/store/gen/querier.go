@@ -9,11 +9,17 @@ import (
 )
 
 type Querier interface {
+	CountUsers(ctx context.Context) (int64, error)
 	CreateCustomer(ctx context.Context, arg CreateCustomerParams) (Customer, error)
 	CreateLegalEntity(ctx context.Context, arg CreateLegalEntityParams) (LegalEntity, error)
 	CreateOwner(ctx context.Context, arg CreateOwnerParams) (Owner, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
+	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateSupplier(ctx context.Context, arg CreateSupplierParams) (Supplier, error)
+	CreateUser(ctx context.Context, arg CreateUserParams) (AppUser, error)
+	DeleteExpiredSessions(ctx context.Context, now int64) error
+	DeleteSession(ctx context.Context, tokenHash string) error
+	DeleteSessionsForUser(ctx context.Context, userID string) error
 	GetCustomer(ctx context.Context, id string) (Customer, error)
 	GetCustomerByCode(ctx context.Context, code string) (Customer, error)
 	GetLegalEntity(ctx context.Context, id string) (LegalEntity, error)
@@ -25,8 +31,13 @@ type Querier interface {
 	// a single row or none.
 	GetProductByBarcode(ctx context.Context, barcode *string) (Product, error)
 	GetProductByCode(ctx context.Context, code string) (Product, error)
+	GetRoleForUserInEntity(ctx context.Context, arg GetRoleForUserInEntityParams) (string, error)
+	GetSession(ctx context.Context, tokenHash string) (Session, error)
 	GetSupplier(ctx context.Context, id string) (Supplier, error)
 	GetSupplierByCode(ctx context.Context, code string) (Supplier, error)
+	GetUser(ctx context.Context, id string) (AppUser, error)
+	GetUserByUsername(ctx context.Context, username string) (AppUser, error)
+	GrantRole(ctx context.Context, arg GrantRoleParams) error
 	// Products with no owner are the company bucket (R2.2). It is a distinct line
 	// on the margin report, so it gets a distinct query rather than a nullable
 	// parameter that reads as an afterthought.
@@ -36,7 +47,13 @@ type Querier interface {
 	ListOwners(ctx context.Context, includeInactive interface{}) ([]Owner, error)
 	ListProducts(ctx context.Context, includeInactive interface{}) ([]Product, error)
 	ListProductsByOwner(ctx context.Context, ownerID *string) ([]Product, error)
+	ListRolesForUser(ctx context.Context, userID string) ([]ListRolesForUserRow, error)
 	ListSuppliers(ctx context.Context, includeInactive interface{}) ([]Supplier, error)
+	ListUsers(ctx context.Context) ([]AppUser, error)
+	RevokeRole(ctx context.Context, arg RevokeRoleParams) error
+	SetUserActive(ctx context.Context, arg SetUserActiveParams) error
+	SetUserPassword(ctx context.Context, arg SetUserPasswordParams) error
+	TouchSession(ctx context.Context, arg TouchSessionParams) error
 	UpdateCustomer(ctx context.Context, arg UpdateCustomerParams) (Customer, error)
 	UpdateLegalEntity(ctx context.Context, arg UpdateLegalEntityParams) (LegalEntity, error)
 	UpdateOwner(ctx context.Context, arg UpdateOwnerParams) (Owner, error)

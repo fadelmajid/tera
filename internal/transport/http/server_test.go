@@ -86,11 +86,20 @@ func do(t *testing.T, cfg terahttp.Config, method, path string) response {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(resp.Body)
+	out, err := readAll(resp)
 	if err != nil {
 		t.Fatalf("read body: %v", err)
 	}
-	return response{status: resp.StatusCode, header: resp.Header, body: string(body)}
+	return out
+}
+
+// readAll drains a response into the value tests assert on.
+func readAll(resp *stdhttp.Response) (response, error) {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return response{}, err
+	}
+	return response{status: resp.StatusCode, header: resp.Header, body: string(body)}, nil
 }
 
 // Liveness touches nothing else, so a database problem cannot make the process

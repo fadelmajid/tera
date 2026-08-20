@@ -13,6 +13,7 @@ row citing the one it replaces.
 | D-005 | Instants are UTC `INTEGER`; `business_date` and `book_year` are denormalised at write time in entity-local time | 2026-08-20 | every dated table |
 | D-006 | The product catalogue is **shared across entities**; stock is what is entity-scoped | 2026-08-20 | migration 001, Phase 4 |
 | D-007 | Every table is `STRICT` | 2026-08-20 | every migration |
+| D-008 | Server-side sessions over plain HTTP on the LAN; cookie `Secure` is opt-in | 2026-08-20 | auth, deployment |
 
 ---
 
@@ -158,3 +159,30 @@ That turns INV-1 from a convention the code is expected to honour into something
 the database refuses to violate — including through a hand-written `INSERT` in a
 `sqlite3` shell during a support session, which is exactly when the convention
 would otherwise be forgotten.
+
+## D-008 — Sessions on a plain-HTTP LAN
+
+Sessions are server-side rows, not signed tokens. There is no key to rotate, no
+clock skew to reason about, and revoking a session is a `DELETE` — which matters
+when the machine holding the family's settlement figures is a PC in a shop. The
+token is never stored, only its SHA-256, so a copy of the database file — and
+R14 puts copies on removable media — does not hand anyone a working session.
+
+**The trade worth stating plainly.** The shop LAN is plain HTTP. There is no
+certificate authority behind a `192.168.1.x` address, and R8.6 wants a stable IP
+or mDNS name rather than a domain. So the session cookie is `HttpOnly` and
+`SameSite=Lax` unconditionally, but `Secure` is off by default — a Secure cookie
+over HTTP is simply never sent, which would lock every user out on day one.
+
+What that costs: anyone who can already put a device on the shop's network and
+observe traffic can capture a session cookie. That is the same person who could
+already reach the server directly. It is a real exposure and it is accepted for
+the same reason R8.7 accepts the single point of failure — the threat model is a
+small shop's own network, not a hostile one.
+
+`TERA_COOKIE_SECURE=1` turns it on the day TLS is terminated in front of the
+server. gosec's G124 flags the non-literal `Secure` value; the two suppressions
+point here rather than hiding it.
+
+Passwords are bcrypt at cost 12. An unknown username still pays for one bcrypt
+comparison, so login timing does not reveal which usernames exist.
