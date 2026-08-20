@@ -17,11 +17,11 @@ jobs:
     name: build & test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # go-version-file pins to go.mod, so CI holds the floor the project
       # claims (Go 1.23) rather than whatever the runner ships with.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -45,16 +45,16 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
 
       # Enforces the layering rule and the no-float rule as well as style —
       # see the depguard and forbidigo blocks in .golangci.yml.
-      - uses: golangci/golangci-lint-action@v8
+      - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.13.0
 
@@ -64,7 +64,7 @@ jobs:
   #   name: sqlc up to date
   #   runs-on: ubuntu-latest
   #   steps:
-  #     - uses: actions/checkout@v4
+  #     - uses: actions/checkout@v7
   #     - uses: sqlc-dev/setup-sqlc@v4
   #       with:
   #         sqlc-version: '1.31.1'
