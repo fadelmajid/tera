@@ -1,0 +1,28 @@
+# sqlc — hand-written SQL compiled to type-safe Go. No ORM (ARCHITECTURE §7).
+#
+# Run `make sqlc` after touching anything in internal/store/queries.
+# Output is checked in and never hand-edited.
+version: "2"
+sql:
+  - engine: sqlite
+    schema: internal/store/migrations
+    queries: internal/store/queries
+    gen:
+      go:
+        package: gen
+        out: internal/store/gen
+        sql_package: database/sql
+        emit_interface: true # Querier interface — the service layer takes it, tests fake it
+        emit_empty_slices: true # a report with no rows returns [], never null
+        emit_pointers_for_null_types: true # nullable owner_id is *string: nil = company bucket (R2.2)
+        emit_json_tags: false # store rows are not wire types; transport owns its own DTOs
+        # Rupiah columns are INTEGER and land as int64 (INV-1). Nothing here is
+        # ever REAL, so no float override exists or should be added.
+        overrides:
+          - db_type: "INTEGER"
+            go_type: "int64"
+          - db_type: "INTEGER"
+            nullable: true
+            go_type:
+              import: "database/sql"
+              type: "NullInt64"
