@@ -10,6 +10,7 @@ row citing the one it replaces.
 | D-002 | Go floor 1.23; tool versions pinned in the Makefile | 2026-08-20 | build, CI |
 | D-003 | Identifiers are **UUIDv7**, stored as canonical lowercase `TEXT` | 2026-08-20 | every migration |
 | D-004 | All three roles — owner, manager, staff — exist at go-live | 2026-08-20 | TASKS 0.6 |
+| D-005 | Instants are UTC `INTEGER`; `business_date` and `book_year` are denormalised at write time in entity-local time | 2026-08-20 | every dated table |
 
 ---
 
@@ -64,3 +65,55 @@ retrofitting authorization into every mutating handler later.
 figures (R13.3). That is a visibility rule inside the Phase 3 UI, not a question
 of whether the role exists. Sensitive in both directions in a family business —
 needs the user's answer before the margin screen ships.
+
+## D-005 — UTC instants, entity-local date denormalised at write time
+
+Every table that records when something happened carries two things:
+
+    occurred_at    INTEGER  -- unix seconds, UTC. The instant.
+    business_date  TEXT     -- 'YYYY-MM-DD' in the entity's timezone. The day it counts for.
+
+plus `book_year INTEGER` wherever the book year is the reporting window
+(`omzet_ledger` already has it, ARCHITECTURE §3).
+
+**Why not derive the local date at read time.** INV-5 requires book-year and
+business-day boundaries in entity-local time. SQLite cannot do that conversion:
+`datetime(ts, 'unixepoch', 'localtime')` uses the *server process's* timezone,
+not the entity's. It would produce right-looking answers on a shop PC set to WIB
+and wrong ones the moment the machine is restored onto a laptop in another zone
+(R8.7 says that restore is the recovery plan), or if the two entities ever
+differ. So deriving in SQL is not a worse option — it is not an available one.
+
+Deriving in Go at read time is available, but then the margin report, the omzet
+clock, the Z-report, the sales report, and the aging buckets each re-implement
+the same rule, and the one that gets it wrong is discovered in January.
+Computing it once, at the moment of the event, from the entity's IANA timezone
+and its `book_year_start_month`, means every reader just groups by a column.
+
+**This is a snapshot, not a cache.** It looks like it contradicts the
+derive-don't-store stance behind INV-7, and the distinction matters enough to
+write down: a layer's remaining quantity is a *running* figure over an
+append-only event stream, and storing it would destroy the audit trail. A
+business date is a *pure function of the moment it happened* — instant, entity
+timezone, book-year start — fixed forever once the event exists. It belongs with
+the tax snapshot (INV-3), not with a materialised balance. Recomputing it later
+from current config is the bug, not the feature.
+
+Corrections inherit rather than recompute: a void or refund carries the original
+transaction's `business_date` and `book_year`, so a January void of a December
+sale decrements the prior book year (SPEC §5.4, TASKS 7.6).
+
+**Seconds, not milliseconds.** Ties are expected — one purchase writes several
+layers in the same second — and they are already resolved deterministically by
+the UUIDv7 tiebreak (D-003). Finer granularity would reduce ties without
+removing the need to break them.
+
+**Never store local wall-clock time**, with or without an offset. An instant is
+UTC; a local rendering is derived from it.
+
+**Consequence for the binary:** `cmd/tera` blank-imports `time/tzdata`. The
+server is a shop PC that may carry no system zoneinfo, and without the embedded
+database `time.LoadLocation("Asia/Jakarta")` fails, the fallback is UTC, and a
+23:30 WIB sale on 31 December books into the following year — silently, once a
+year, in the figure the omzet alarm reads. Costs ~450KB and keeps the deploy one
+file. TASKS 7.3 is the test.

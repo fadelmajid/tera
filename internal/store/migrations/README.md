@@ -15,8 +15,11 @@ Rules:
 - Primary keys are UUIDv7 in canonical lowercase `TEXT` (docs/DECISIONS.md D-003).
   v7 is time-ordered, so the FIFO tiebreak on `id` resolves to insertion order (SPEC §3.3).
 - Rupiah columns are `INTEGER` (int64). Never `REAL` (INV-1).
-- Timestamps store UTC instants; book-year and business-day boundaries are
-  resolved in the entity's timezone at read time, never by storing local time (INV-5).
+- Instants are `INTEGER` unix seconds in UTC. Alongside them, `business_date`
+  (`TEXT`, `YYYY-MM-DD`) and `book_year` are computed in the entity's timezone
+  **at write time** and stored (INV-5, docs/DECISIONS.md D-005). SQLite's
+  `localtime` modifier uses the server's zone, not the entity's, so this
+  conversion cannot happen in SQL. Never store local wall-clock time.
 - `stock_layer` and `stock_consumption` are append-only. No migration adds a
   mutable balance column to either (INV-7).
 

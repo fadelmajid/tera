@@ -12,6 +12,14 @@ package main
 import (
 	"fmt"
 	"os"
+
+	// Embed the IANA timezone database. Book-year and business-day boundaries
+	// are resolved in the entity's timezone (INV-5, DECISIONS D-005), and the
+	// server is a shop PC that may carry no system zoneinfo — or be restored
+	// onto a laptop that doesn't (R8.7). Without this, LoadLocation("Asia/Jakarta")
+	// fails, the fallback is UTC, and a 23:30 WIB sale on 31 December books into
+	// the wrong year: silently, once a year, in the figure the omzet alarm reads.
+	_ "time/tzdata"
 )
 
 // version is stamped at build time via -ldflags "-X main.version=...".
