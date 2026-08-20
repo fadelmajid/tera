@@ -15,3 +15,16 @@ When it is:
   *"Estimasi berdasarkan data di sistem ini. Konfirmasikan dengan konsultan
   pajak Anda."*
 - The margin report is *Laporan Margin per Owner*. Never *Laba Rugi*.
+
+## web/dist
+
+The build output, embedded into the Go binary by `web/embed.go`. It is generated,
+not source — except `.gitkeep`, which is committed.
+
+`//go:embed` fails at **compile time** on a pattern matching nothing, so a fresh
+clone with no build must still have something in `web/dist`. Vite's
+`emptyOutDir` deletes that placeholder on every build, so `make web` puts it
+back. If you run `npm run build` directly, run `touch dist/.gitkeep` after it.
+
+`Assets()` reports whether a real build is present; without one the server serves
+an explanatory page and the API still works.

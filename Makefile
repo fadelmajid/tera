@@ -34,6 +34,9 @@ help: ## List available targets
 
 web: ## Build the browser client into web/dist (embedded by the Go build)
 	cd web && npm ci --no-audit --no-fund && npm run build
+	# vite empties the output directory, which takes .gitkeep with it. The Go
+	# embed needs at least one file to match, so put it back.
+	touch web/dist/.gitkeep
 
 build: ## Build ./bin/tera (embeds whatever web/dist currently holds)
 	go build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY) ./cmd/tera

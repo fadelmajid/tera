@@ -63,6 +63,13 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # web/embed.go embeds web/dist, and //go:embed fails at compile time on a
+      # pattern matching nothing. This job does not build the front end, so it
+      # makes its own placeholder rather than depending on a committed file
+      # that a local `vite build` deletes.
+      - name: placeholder for the embedded SPA
+        run: mkdir -p web/dist && touch web/dist/.gitkeep
+
       # Enforces the layering rule and the no-float rule as well as style —
       # see the depguard and forbidigo blocks in .golangci.yml.
       - uses: golangci/golangci-lint-action@v9
