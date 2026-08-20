@@ -1,0 +1,72 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # go-version-file pins to go.mod, so CI holds the floor the project
+      # claims (Go 1.23) rather than whatever the runner ships with.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      # -race needs cgo; the shipped binary is still built CGO_ENABLED=0.
+      - name: go test -race
+        run: go test -race -count=1 ./...
+
+      - name: go.mod is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Enforces the layering rule and the no-float rule as well as style —
+      # see the depguard and forbidigo blocks in .golangci.yml.
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.13.0
+
+  # Regenerating sqlc must produce no diff — generated code stays in step with
+  # the queries. Enabled once queries exist (TASKS 0.4).
+  # sqlc:
+  #   name: sqlc up to date
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: sqlc-dev/setup-sqlc@v4
+  #       with:
+  #         sqlc-version: '1.31.1'
+  #     - run: sqlc vet
+  #     - run: sqlc diff

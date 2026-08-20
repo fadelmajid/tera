@@ -1,0 +1,144 @@
+# golangci-lint v2 configuration.
+#
+# Two rules here are not style preferences — they are the project's invariants
+# made mechanical, so they fail in CI instead of in a family argument:
+#
+#   depguard   domain packages import no database, HTTP, or store code
+#              (ARCHITECTURE §2). Purity is what makes tax, FIFO, and margin
+#              testable, and those three are the product.
+#   forbidigo  no float in internal/domain (INV-1). Rupiah is int64; fractional
+#              intermediates use shopspring/decimal and round once at the edge.
+
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose
+    - copyloopvar
+    - depguard
+    - durationcheck
+    - errorlint
+    - forbidigo
+    - gocritic
+    - gosec
+    - misspell
+    - nilerr
+    - noctx
+    - predeclared
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - unconvert
+    - wastedassign
+
+  settings:
+    depguard:
+      rules:
+        # ARCHITECTURE §2: dependencies point inward. The domain is a leaf.
+        domain-is-pure:
+          list-mode: lax
+          files:
+            - "**/internal/domain/**"
+          deny:
+            - pkg: database/sql
+              desc: "domain must not import a database (ARCHITECTURE §2) — pass values in, return values out"
+            - pkg: net/http
+              desc: "domain must not import HTTP (ARCHITECTURE §2) — transport calls the domain, never the reverse"
+            - pkg: github.com/fadelmajid/tera/internal/store
+              desc: "domain must not import the store (ARCHITECTURE §2)"
+            - pkg: github.com/fadelmajid/tera/internal/transport
+              desc: "domain must not import transport (ARCHITECTURE §2)"
+            - pkg: github.com/fadelmajid/tera/internal/service
+              desc: "domain must not import the service layer (ARCHITECTURE §2) — the arrow points the other way"
+            - pkg: github.com/fadelmajid/tera/internal/hardware
+              desc: "domain must not import hardware (ARCHITECTURE §2)"
+        # The store owns SQL. Nobody else opens a database.
+        sql-stays-in-store:
+          list-mode: lax
+          files:
+            - "**/internal/transport/**"
+            - "**/internal/hardware/**"
+          deny:
+            - pkg: database/sql
+              desc: "SQL belongs in internal/store (ARCHITECTURE §2)"
+
+    forbidigo:
+      # Scoped to internal/domain by the exclusion rule below. Catches float
+      # conversions; declarations still need review, and the property tests in
+      # domain/tax are the real backstop (SPEC §2.2).
+      forbid:
+        - pattern: ^float(32|64)$
+          msg: "money is never a float (INV-1) — int64 rupiah, shopspring/decimal for intermediates, round once at the boundary"
+
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: var-declaration
+        - name: var-naming
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - whyNoLint
+
+    gosec:
+      excludes:
+        - G104 # duplicates errcheck
+
+    misspell:
+      locale: UK
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - internal/store/gen # sqlc output; regenerate, never hand-edit
+    rules:
+      # The float ban is a domain rule. Elsewhere (hardware timings, ratios in
+      # a chart payload) a float can be legitimate.
+      - path-except: internal/domain/
+        linters:
+          - forbidigo
+      # Test fixtures state expected rupiah figures as literals; that is the point.
+      - path: _test\.go
+        linters:
+          - gosec
+          - dupl
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/fadelmajid/tera
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

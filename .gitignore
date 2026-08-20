@@ -4,10 +4,13 @@
 *.test
 *.out
 
-# sqlite
+# sqlite — the database is the business's data, never the repo's
 *.db
 *.db-wal
 *.db-shm
+
+# backups (R14) — local target, not source
+/backups/
 
 # node / vite
 node_modules/
@@ -18,5 +21,8 @@ web/dist/
 .env.*
 !.env.example
 
-# os
+# editors / os
+.idea/
+.vscode/
+*.swp
 .DS_Store
