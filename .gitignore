@@ -1,0 +1,22 @@
+# go
+/bin/
+/tera
+*.test
+*.out
+
+# sqlite
+*.db
+*.db-wal
+*.db-shm
+
+# node / vite
+node_modules/
+web/dist/
+
+# env
+.env
+.env.*
+!.env.example
+
+# os
+.DS_Store
