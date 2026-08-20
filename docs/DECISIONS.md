@@ -15,6 +15,7 @@ row citing the one it replaces.
 | D-007 | Every table is `STRICT` | 2026-08-20 | every migration |
 | D-008 | Server-side sessions over plain HTTP on the LAN; cookie `Secure` is opt-in | 2026-08-20 | auth, deployment |
 | D-009 | Owner and manager see owner margin figures; staff see none | 2026-08-20 | Phase 3, query layer |
+| D-010 | A sales return restores to the **original** FIFO layer, as an appended reversal | 2026-08-21 | TASKS 1.2, 2.9, 3.1 |
 
 ---
 
@@ -203,3 +204,61 @@ the menu item.
 
 This is a per-entity authority like every other (R13.4): a manager of the
 non-PKP entity sees that company's margin, not the PKP entity's.
+
+## D-010 — A sales return restores to the original layer (R12.1, resolved)
+
+Confirmed by the user on 2026-08-21: the goods go back to the layer they were
+drawn from, not to a new layer at the return date.
+
+**Why it is the right answer.** COGS reverses at exactly the cost that was
+taken, so the margin reverses exactly. A new layer at return-date cost would
+reverse revenue in full while reversing cost at a different figure, quietly
+inventing margin — in the one report family members settle money on (R2.4). It
+also keeps owner attribution automatic: the original layer belongs to an owner,
+so the reversal lands in that owner's bucket without anyone deciding whose it is
+(INV-8). And the layer's `faktur_received` basis is preserved rather than
+re-derived (INV-9).
+
+### The mechanism: append a reversal, never edit the layer
+
+"Restore to the original layer" must not become "increment the layer". Layers
+and consumptions are both append-only (INV-7), and a corrected transaction is a
+compensating record, never a mutation (INV-2). So a return appends a **new
+`stock_consumption` row** against the original layer with a negative `qty_out`
+and a negative `cost_idr`.
+
+The derivation is unchanged and needs no special case:
+
+    remaining(layer) = qty_in - Σ qty_out
+
+A negative draw raises the remainder. The layer row is never touched, and the
+trail reads in order: this sale took 3 units at this cost, this return gave 2 of
+them back at the same cost.
+
+**This extends SPEC §3.1**, which describes `stock_consumption` without a
+reversal concept. Two additions when the table is built (TASKS 1.1):
+
+- `reverses_id` — nullable, references another `stock_consumption` row. A
+  reversal must name the draw it reverses; a "return" that corresponds to no
+  actual sale is a bug, not a stock increase.
+- A rule enforced in the service layer: the reversals against one consumption
+  cannot exceed what it consumed. Returning four of three units sold is not a
+  correction, it is data entry to reject.
+
+### The trade being accepted
+
+A layer restored months later keeps its original `acquired_at`, so oldest-first
+consumption will draw those units before newer stock. For *costing* that is
+exactly right — it is the same goods at the same cost. For *physical picking* it
+points at older stock, which matters when a batch expires. FEFO and batch-expiry
+picking are explicitly out of scope (REQUIREMENTS §8), and the expiry field is
+captured but unused (§6.4), so nothing acts on this today. Worth remembering if
+expiry ever comes into scope.
+
+### Still open, and a different question
+
+This decides **which layer**, not **which month**. A November return of an
+October sale — whose margin period does it land in, when October's money was
+already split — remains undecided (SPEC §4.4, TASKS 3.4). Do not read D-010 as
+having answered it; the two get conflated easily because both are "what happens
+to a return".

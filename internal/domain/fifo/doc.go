@@ -26,5 +26,17 @@
 // (SPEC §3.2). Same supplier price, three different cost bases. Get this wrong
 // and every margin downstream is wrong by ~11%.
 //
+// # Returns reverse the original draw
+//
+// A sales return restores stock to the layer it came from (R12.1, D-010) so
+// that COGS reverses at exactly the cost taken and the margin reverses exactly.
+// It is expressed as an appended consumption with a negative qty_out and cost,
+// referencing both the layer and the draw being reversed — never as an edit to
+// the layer, which stays append-only (INV-7). remaining = qty_in - Σ qty_out
+// needs no special case for it.
+//
+// Which *period* a return lands in is a separate and still open question
+// (SPEC §4.4).
+//
 // TASKS 1.2–1.4.
 package fifo
