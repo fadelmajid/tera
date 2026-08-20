@@ -27,10 +27,12 @@ const (
 	minPassword = 8
 )
 
-// bcryptCost is a var, not a const, purely so tests can lower it. At cost 12 a
-// hash takes roughly a third of a second by design, which is right for a login
-// screen and wrong for a test suite that logs in dozens of times.
-var bcryptCost = 12
+// defaultBcryptCost. At cost 12 a hash takes roughly a third of a second by
+// design: right for a login screen, wrong for a test suite that logs in dozens
+// of times. The cost therefore lives on the Auth instance rather than in a
+// package variable — a package variable would be shared mutable state that
+// parallel tests race on, which is a bug the knob itself would have introduced.
+const defaultBcryptCost = 12
 
 var (
 	// ErrInvalidCredentials covers both a wrong password and an unknown user.
@@ -75,9 +77,10 @@ func (p Principal) Can(entityID string, capability func(Role) bool) bool {
 
 // Auth issues and verifies sessions.
 type Auth struct {
-	db  *store.DB
-	q   *gen.Queries
-	now func() time.Time
+	db   *store.DB
+	q    *gen.Queries
+	now  func() time.Time
+	cost int
 }
 
 // NewAuth builds the authenticator. now is injectable so session expiry is
@@ -86,7 +89,7 @@ func NewAuth(db *store.DB, now func() time.Time) *Auth {
 	if now == nil {
 		now = time.Now
 	}
-	return &Auth{db: db, q: gen.New(db), now: now}
+	return &Auth{db: db, q: gen.New(db), now: now, cost: defaultBcryptCost}
 }
 
 // CreateUser adds a user with a bcrypt-hashed password.
@@ -99,7 +102,7 @@ func (a *Auth) CreateUser(ctx context.Context, username, fullName, password stri
 		return gen.AppUser{}, ErrPasswordTooShort
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), a.cost)
 	if err != nil {
 		return gen.AppUser{}, fmt.Errorf("service: hash password: %w", err)
 	}

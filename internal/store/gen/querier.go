@@ -13,6 +13,7 @@ type Querier interface {
 	// the request, 0 means someone else already claimed it.
 	ClaimRequest(ctx context.Context, arg ClaimRequestParams) (int64, error)
 	CompleteRequest(ctx context.Context, arg CompleteRequestParams) error
+	CountAuditLog(ctx context.Context) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
 	CreateCustomer(ctx context.Context, arg CreateCustomerParams) (Customer, error)
 	CreateLegalEntity(ctx context.Context, arg CreateLegalEntityParams) (LegalEntity, error)
@@ -43,6 +44,10 @@ type Querier interface {
 	GetUser(ctx context.Context, id string) (AppUser, error)
 	GetUserByUsername(ctx context.Context, username string) (AppUser, error)
 	GrantRole(ctx context.Context, arg GrantRoleParams) error
+	ListAuditByActor(ctx context.Context, arg ListAuditByActorParams) ([]AuditLog, error)
+	ListAuditByPeriod(ctx context.Context, arg ListAuditByPeriodParams) ([]AuditLog, error)
+	// The trail for one record: what happened to this sale, this layer, this product.
+	ListAuditForRecord(ctx context.Context, arg ListAuditForRecordParams) ([]AuditLog, error)
 	// Products with no owner are the company bucket (R2.2). It is a distinct line
 	// on the margin report, so it gets a distinct query rather than a nullable
 	// parameter that reads as an afterthought.
@@ -67,6 +72,7 @@ type Querier interface {
 	UpdateOwner(ctx context.Context, arg UpdateOwnerParams) (Owner, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 	UpdateSupplier(ctx context.Context, arg UpdateSupplierParams) (Supplier, error)
+	WriteAuditLog(ctx context.Context, arg WriteAuditLogParams) error
 }
 
 var _ Querier = (*Queries)(nil)

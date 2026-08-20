@@ -19,8 +19,6 @@ func (c *clock) add(d time.Duration) { c.t = c.t.Add(d) }
 
 func newAuth(t *testing.T) (*service.Auth, *gen.Queries, *clock, context.Context) {
 	t.Helper()
-	t.Cleanup(service.SetBcryptCostForTest(4))
-
 	ctx := context.Background()
 	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "tera.db"))
 	if err != nil {
@@ -33,7 +31,7 @@ func newAuth(t *testing.T) (*service.Auth, *gen.Queries, *clock, context.Context
 	}
 
 	c := &clock{t: time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)}
-	return service.NewAuth(db, c.now), gen.New(db), c, ctx
+	return service.NewAuthWithCost(db, c.now, 4), gen.New(db), c, ctx
 }
 
 func makeEntity(ctx context.Context, t *testing.T, q *gen.Queries, code string, isPKP int64) string {

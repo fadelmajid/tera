@@ -14,6 +14,20 @@ type AppUser struct {
 	UpdatedAt    int64
 }
 
+type AuditLog struct {
+	ID              string
+	ActorUserID     *string
+	OccurredAt      int64
+	LegalEntityID   *string
+	RecordType      string
+	RecordID        string
+	Action          string
+	BeforeJson      *string
+	AfterJson       *string
+	Reason          *string
+	ClientRequestID *string
+}
+
 type Customer struct {
 	ID        string
 	Code      string
