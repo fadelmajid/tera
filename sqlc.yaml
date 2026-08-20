@@ -19,10 +19,9 @@ sql:
         # Rupiah columns are INTEGER and land as int64 (INV-1). Nothing here is
         # ever REAL, so no float override exists or should be added.
         overrides:
+          # Rupiah, quantities, and unix instants are all INTEGER -> int64.
+          # Nullable columns fall through to emit_pointers_for_null_types above,
+          # so a nullable INTEGER is *int64 and a nullable TEXT is *string —
+          # one convention, and no database/sql types leaking into call sites.
           - db_type: "INTEGER"
             go_type: "int64"
-          - db_type: "INTEGER"
-            nullable: true
-            go_type:
-              import: "database/sql"
-              type: "NullInt64"

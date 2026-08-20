@@ -39,6 +39,7 @@ type Config struct {
 	Addr   string
 	DB     Checker
 	Auth   *service.Auth
+	Idem   *service.Idempotency
 	Logger *slog.Logger
 
 	// CookieSecure marks the session cookie Secure. Off by default: the shop
@@ -89,6 +90,7 @@ func Handler(cfg Config) stdhttp.Handler {
 	}
 	r := chi.NewRouter()
 
+	r.Use(noSniff)
 	r.Use(middleware.RequestID)
 	// Deliberately no RealIP. There is no reverse proxy in front of this — every
 	// client is a browser connecting directly over the shop LAN — so trusting
@@ -102,6 +104,7 @@ func Handler(cfg Config) stdhttp.Handler {
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(authenticate(cfg.Auth))
+		r.Use(idempotent(cfg.Idem, cfg.Logger))
 		r.NotFound(notFoundJSON)
 
 		if cfg.Auth != nil {

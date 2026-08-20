@@ -9,6 +9,10 @@ import (
 )
 
 type Querier interface {
+	// Claims an id. Returns the number of rows inserted: 1 means this caller owns
+	// the request, 0 means someone else already claimed it.
+	ClaimRequest(ctx context.Context, arg ClaimRequestParams) (int64, error)
+	CompleteRequest(ctx context.Context, arg CompleteRequestParams) error
 	CountUsers(ctx context.Context) (int64, error)
 	CreateCustomer(ctx context.Context, arg CreateCustomerParams) (Customer, error)
 	CreateLegalEntity(ctx context.Context, arg CreateLegalEntityParams) (LegalEntity, error)
@@ -31,6 +35,7 @@ type Querier interface {
 	// a single row or none.
 	GetProductByBarcode(ctx context.Context, barcode *string) (Product, error)
 	GetProductByCode(ctx context.Context, code string) (Product, error)
+	GetRequest(ctx context.Context, clientRequestID string) (RequestLog, error)
 	GetRoleForUserInEntity(ctx context.Context, arg GetRoleForUserInEntityParams) (string, error)
 	GetSession(ctx context.Context, tokenHash string) (Session, error)
 	GetSupplier(ctx context.Context, id string) (Supplier, error)
@@ -50,6 +55,9 @@ type Querier interface {
 	ListRolesForUser(ctx context.Context, userID string) ([]ListRolesForUserRow, error)
 	ListSuppliers(ctx context.Context, includeInactive interface{}) ([]Supplier, error)
 	ListUsers(ctx context.Context) ([]AppUser, error)
+	ReleaseRequest(ctx context.Context, clientRequestID string) error
+	// Frees claims abandoned by a crash, so a retry is not blocked forever.
+	ReleaseStaleClaims(ctx context.Context, olderThan int64) error
 	RevokeRole(ctx context.Context, arg RevokeRoleParams) error
 	SetUserActive(ctx context.Context, arg SetUserActiveParams) error
 	SetUserPassword(ctx context.Context, arg SetUserPasswordParams) error

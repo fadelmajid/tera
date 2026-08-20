@@ -52,3 +52,13 @@ func levelFor(status int) slog.Level {
 func contextWithTimeout(r *stdhttp.Request, d time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(r.Context(), d)
 }
+
+// noSniff stops a browser from second-guessing Content-Type. Every response
+// here is JSON or plain text; a sniffed body reinterpreted as HTML is the only
+// route by which stored content could execute in a page.
+func noSniff(next stdhttp.Handler) stdhttp.Handler {
+	return stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		next.ServeHTTP(w, r)
+	})
+}

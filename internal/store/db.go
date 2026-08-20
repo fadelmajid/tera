@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite" // pure-Go driver: no cgo, so the binary stays one file
@@ -118,15 +119,40 @@ func (db *DB) verifyPragmas(ctx context.Context) error {
 // Path returns the database file location, for logs and the backup job.
 func (db *DB) Path() string { return db.path }
 
+// goose configuration is package-global state inside the goose library —
+// SetBaseFS, SetLogger, and SetDialect all write globals that Up and
+// GetDBVersion then read. One process opening one database never notices, but
+// two databases migrating at once is a genuine data race, which is what the
+// parallel tests here do. Configure once, and serialise the calls that read
+// that configuration.
+var (
+	gooseOnce sync.Once
+	gooseErr  error
+	gooseMu   sync.Mutex
+)
+
+func configureGoose() error {
+	gooseOnce.Do(func() {
+		goose.SetBaseFS(migrationsFS)
+		goose.SetLogger(goose.NopLogger())
+		gooseErr = goose.SetDialect("sqlite3")
+	})
+	if gooseErr != nil {
+		return fmt.Errorf("store: goose dialect: %w", gooseErr)
+	}
+	return nil
+}
+
 // Migrate applies every pending migration. Forward-only; goose runs them in one
 // transaction each and records what it applied.
 func (db *DB) Migrate(ctx context.Context) error {
-	goose.SetBaseFS(migrationsFS)
-	goose.SetLogger(goose.NopLogger())
-
-	if err := goose.SetDialect("sqlite3"); err != nil {
-		return fmt.Errorf("store: goose dialect: %w", err)
+	if err := configureGoose(); err != nil {
+		return err
 	}
+
+	gooseMu.Lock()
+	defer gooseMu.Unlock()
+
 	if err := goose.UpContext(ctx, db.DB, migrationsDir); err != nil {
 		return fmt.Errorf("store: migrate: %w", err)
 	}
@@ -135,9 +161,13 @@ func (db *DB) Migrate(ctx context.Context) error {
 
 // Version reports the current schema version.
 func (db *DB) Version(ctx context.Context) (int64, error) {
-	if err := goose.SetDialect("sqlite3"); err != nil {
-		return 0, fmt.Errorf("store: goose dialect: %w", err)
+	if err := configureGoose(); err != nil {
+		return 0, err
 	}
+
+	gooseMu.Lock()
+	defer gooseMu.Unlock()
+
 	v, err := goose.GetDBVersionContext(ctx, db.DB)
 	if err != nil {
 		return 0, fmt.Errorf("store: schema version: %w", err)

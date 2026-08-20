@@ -66,6 +66,18 @@ type Product struct {
 	UpdatedAt    int64
 }
 
+type RequestLog struct {
+	ClientRequestID string
+	UserID          *string
+	Method          string
+	Path            string
+	RequestHash     string
+	StatusCode      int64
+	ResponseBody    string
+	CreatedAt       int64
+	CompletedAt     *int64
+}
+
 type Session struct {
 	TokenHash  string
 	UserID     string

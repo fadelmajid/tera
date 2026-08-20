@@ -78,10 +78,18 @@ func run() error {
 		logger.Warn("gagal membersihkan sesi kedaluwarsa", "error", err)
 	}
 
+	// Frees idempotency claims abandoned by a previous crash, so a client
+	// retrying a sale from before the restart is not blocked by its own claim.
+	idem := service.NewIdempotency(db, time.Now)
+	if err := idem.PurgeStaleClaims(ctx); err != nil {
+		logger.Warn("gagal membersihkan klaim tertunda", "error", err)
+	}
+
 	srv := terahttp.New(terahttp.Config{
 		Addr:         addr,
 		DB:           db,
 		Auth:         auth,
+		Idem:         idem,
 		Logger:       logger,
 		CookieSecure: os.Getenv("TERA_COOKIE_SECURE") == "1",
 	})
