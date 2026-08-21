@@ -1,11 +1,14 @@
 import { NavLink, Route, Routes, Navigate } from 'react-router-dom'
 import type { Session } from '../api/auth'
-import { canManageMasterData, canSeeOwnerMargin } from '../api/auth'
+import { canManageMasterData, canSeeOwnerMargin, canEnterPurchases } from '../api/auth'
 import type { Entity } from '../api/masterdata'
 import { ProdukPage } from '../pages/Produk'
 import { OwnerPage } from '../pages/Owner'
 import { PemasokPage } from '../pages/Pemasok'
 import { PelangganPage } from '../pages/Pelanggan'
+import { PembelianPage } from '../pages/Pembelian'
+import { OpnamePage } from '../pages/Opname'
+import { SaldoAwalPage } from '../pages/SaldoAwal'
 
 /**
  * The application shell.
@@ -33,6 +36,10 @@ export function Kerangka({
   const role = session.roles[entityId]
   const entity = entities.find((e) => e.id === entityId)
   const bolehMaster = role !== undefined && canManageMasterData(role)
+  // R10.4: purchases and stock adjustments are entered by admin or manager,
+  // never cashier staff. Hiding the link is a courtesy; the server refuses the
+  // request regardless.
+  const bolehBeli = role !== undefined && canEnterPurchases(role)
 
   return (
     <div className="app">
@@ -64,6 +71,13 @@ export function Kerangka({
           <NavLink to="/owner">Owner</NavLink>
           <NavLink to="/pemasok">Pemasok</NavLink>
           <NavLink to="/pelanggan">Pelanggan</NavLink>
+          {bolehBeli && (
+            <>
+              <NavLink to="/pembelian">Pembelian</NavLink>
+              <NavLink to="/opname">Opname stok</NavLink>
+              <NavLink to="/saldo-awal">Saldo awal</NavLink>
+            </>
+          )}
         </nav>
 
         <p style={{ marginTop: 24 }}>
@@ -89,6 +103,21 @@ export function Kerangka({
             path="/pelanggan"
             element={bolehMaster ? <PelangganPage entityId={entityId} /> : <TidakBoleh />}
           />
+          <Route
+            path="/pembelian"
+            element={
+              bolehBeli ? (
+                <PembelianPage entityId={entityId} isPKP={entity?.is_pkp ?? false} />
+              ) : (
+                <TidakBoleh />
+              )
+            }
+          />
+          <Route path="/opname" element={bolehBeli ? <OpnamePage entityId={entityId} /> : <TidakBoleh />} />
+          <Route
+            path="/saldo-awal"
+            element={bolehBeli ? <SaldoAwalPage entityId={entityId} /> : <TidakBoleh />}
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
@@ -106,7 +135,8 @@ function Beranda({ entity, bolehMargin }: { entity: Entity | undefined; bolehMar
           {entity?.is_pkp ? ' — PKP, wajib memungut PPN.' : ' — non-PKP, tidak memungut PPN.'}
         </p>
         <p className="kosong">
-          Pembelian, penjualan, dan laporan menyusul. Saat ini yang tersedia adalah data master.
+          Penjualan dan laporan menyusul. Yang tersedia saat ini: data master, pembelian, opname
+          stok, dan saldo awal.
         </p>
         {!bolehMargin && (
           <p className="kosong">
