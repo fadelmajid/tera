@@ -85,7 +85,14 @@ func run() error {
 		logger.Warn("gagal membersihkan klaim tertunda", "error", err)
 	}
 
-	master := service.NewMasterData(db, service.NewAuditor(time.Now), time.Now)
+	// One auditor for every service: the audit row and the change it describes
+	// commit in the same transaction, so there is nothing to share but the
+	// clock (INV-10).
+	aud := service.NewAuditor(time.Now)
+	master := service.NewMasterData(db, aud, time.Now)
+	purchasing := service.NewPurchasing(db, aud, time.Now)
+	opname := service.NewOpname(db, aud, time.Now)
+	opening := service.NewOpening(db, aud, time.Now)
 
 	srv := terahttp.New(terahttp.Config{
 		Addr:         addr,
@@ -93,6 +100,9 @@ func run() error {
 		Auth:         auth,
 		Idem:         idem,
 		Master:       master,
+		Purchasing:   purchasing,
+		Opname:       opname,
+		Opening:      opening,
 		Logger:       logger,
 		CookieSecure: os.Getenv("TERA_COOKIE_SECURE") == "1",
 	})

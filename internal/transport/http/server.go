@@ -41,7 +41,14 @@ type Config struct {
 	Auth   *service.Auth
 	Idem   *service.Idempotency
 	Master *service.MasterData
-	Logger *slog.Logger
+	// Purchasing, Opname and Opening are all gated on CanEnterPurchases
+	// (R10.4): they set the faktur status that decides a layer's cost basis
+	// and they post stock adjustments, which makes them margin-bearing rather
+	// than data entry.
+	Purchasing *service.Purchasing
+	Opname     *service.Opname
+	Opening    *service.Opening
+	Logger     *slog.Logger
 
 	// CookieSecure marks the session cookie Secure. Off by default: the shop
 	// LAN is plain HTTP with no certificate authority, and a Secure cookie
@@ -118,6 +125,7 @@ func Handler(cfg Config) stdhttp.Handler {
 			})
 
 			mountMasterData(r, cfg)
+			mountPurchasing(r, cfg)
 		}
 	})
 

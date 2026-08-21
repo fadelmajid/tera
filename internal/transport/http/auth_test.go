@@ -49,11 +49,15 @@ func newClient(t *testing.T) (c *client, auth *service.Auth, q *gen.Queries, ctx
 	}
 
 	auth = service.NewAuth(db, time.Now)
+	aud := service.NewAuditor(time.Now)
 	srv := httptest.NewServer(terahttp.Handler(terahttp.Config{
-		DB:     db,
-		Auth:   auth,
-		Idem:   service.NewIdempotency(db, time.Now),
-		Master: service.NewMasterData(db, service.NewAuditor(time.Now), time.Now),
+		DB:         db,
+		Auth:       auth,
+		Idem:       service.NewIdempotency(db, time.Now),
+		Master:     service.NewMasterData(db, aud, time.Now),
+		Purchasing: service.NewPurchasing(db, aud, time.Now),
+		Opname:     service.NewOpname(db, aud, time.Now),
+		Opening:    service.NewOpening(db, aud, time.Now),
 	}))
 	t.Cleanup(srv.Close)
 

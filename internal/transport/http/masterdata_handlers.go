@@ -285,9 +285,22 @@ func writeServiceError(w stdhttp.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, service.ErrValidation):
 		writeJSON(w, stdhttp.StatusBadRequest, map[string]any{"error": err.Error()})
+	// R12.5: an adjustment or a void with no explanation is refused. It is bad
+	// input, not a server fault, and the message names what is missing.
+	case errors.Is(err, service.ErrReasonRequired):
+		writeJSON(w, stdhttp.StatusBadRequest, map[string]any{"error": err.Error()})
 	case errors.Is(err, service.ErrNotFound):
 		writeJSON(w, stdhttp.StatusNotFound, map[string]any{"error": err.Error()})
 	case errors.Is(err, service.ErrDuplicate):
+		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
+	// The request is well formed; the books are not in a state that admits it.
+	// 409 rather than 400 so a client can tell "you typed it wrong" from
+	// "someone else moved the stock while you were counting".
+	case errors.Is(err, service.ErrAlreadyPosted):
+		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
+	// INV-8 reaching the wire. Never a fallback to another owner's stock, and
+	// never a 500 that reads like a bug: the message says whose stock is short.
+	case errors.Is(err, service.ErrInsufficientStock):
 		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
 	default:
 		writeJSON(w, stdhttp.StatusInternalServerError, map[string]any{"error": "kesalahan internal"})
