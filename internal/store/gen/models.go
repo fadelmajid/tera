@@ -28,6 +28,23 @@ type AuditLog struct {
 	ClientRequestID *string
 }
 
+type CashSession struct {
+	ID              string
+	EntityID        string
+	Status          string
+	OpenedAt        int64
+	BusinessDate    string
+	OpenedBy        *string
+	OpeningFloatIdr int64
+	ClosedAt        *int64
+	ClosedBy        *string
+	CountedCashIdr  *int64
+	ExpectedCashIdr *int64
+	VarianceIdr     *int64
+	CloseNote       *string
+	CreatedAt       int64
+}
+
 type Customer struct {
 	ID        string
 	Code      string
@@ -233,6 +250,81 @@ type RequestLog struct {
 	ResponseBody    string
 	CreatedAt       int64
 	CompletedAt     *int64
+}
+
+type Sale struct {
+	ID            string
+	EntityID      string
+	CashSessionID *string
+	CustomerID    *string
+	InvoiceNo     string
+	OccurredAt    int64
+	BusinessDate  string
+	Status        string
+	VoidedAt      *int64
+	VoidedBy      *string
+	VoidReason    *string
+	FakturIssued  int64
+	FakturNo      *string
+	GrossIdr      int64
+	DiscountIdr   int64
+	PpnIdr        int64
+	TotalIdr      int64
+	CogsIdr       int64
+	IsCredit      int64
+	DueDate       *string
+	Note          *string
+	CreatedBy     *string
+	CreatedAt     int64
+}
+
+type SaleLine struct {
+	ID               string
+	SaleID           string
+	ProductID        string
+	OwnerID          *string
+	Qty              int64
+	UnitPriceIdr     int64
+	GrossIdr         int64
+	LineDiscountIdr  int64
+	AllocDiscountIdr int64
+	NetIdr           int64
+	CogsIdr          int64
+	CreatedAt        int64
+}
+
+type SalePayment struct {
+	ID        string
+	SaleID    string
+	Method    string
+	AmountIdr int64
+	Reference *string
+	CreatedAt int64
+}
+
+type SaleReturn struct {
+	ID               string
+	EntityID         string
+	SaleID           string
+	OccurredAt       int64
+	BusinessDate     string
+	SaleBusinessDate string
+	Reason           string
+	RefundIdr        int64
+	CogsReversedIdr  int64
+	RefundMethod     string
+	CreatedBy        *string
+	CreatedAt        int64
+}
+
+type SaleReturnLine struct {
+	ID              string
+	SaleReturnID    string
+	SaleLineID      string
+	Qty             int64
+	RefundIdr       int64
+	CogsReversedIdr int64
+	CreatedAt       int64
 }
 
 type Session struct {

@@ -12,8 +12,12 @@ type Querier interface {
 	// Claims an id. Returns the number of rows inserted: 1 means this caller owns
 	// the request, 0 means someone else already claimed it.
 	ClaimRequest(ctx context.Context, arg ClaimRequestParams) (int64, error)
+	CloseCashSession(ctx context.Context, arg CloseCashSessionParams) (CashSession, error)
 	CompleteRequest(ctx context.Context, arg CompleteRequestParams) error
 	CountAuditLog(ctx context.Context) (int64, error)
+	// Invoice numbers are per company and sequential within a business date, which
+	// is what a shop expects to read off a receipt.
+	CountSalesOnDate(ctx context.Context, arg CountSalesOnDateParams) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
 	CreateCustomer(ctx context.Context, arg CreateCustomerParams) (Customer, error)
 	CreateLegalEntity(ctx context.Context, arg CreateLegalEntityParams) (LegalEntity, error)
@@ -34,6 +38,11 @@ type Querier interface {
 	CreatePurchaseReturn(ctx context.Context, arg CreatePurchaseReturnParams) (PurchaseReturn, error)
 	CreatePurchaseReturnLine(ctx context.Context, arg CreatePurchaseReturnLineParams) (PurchaseReturnLine, error)
 	CreateReceivable(ctx context.Context, arg CreateReceivableParams) (Receivable, error)
+	CreateSale(ctx context.Context, arg CreateSaleParams) (Sale, error)
+	CreateSaleLine(ctx context.Context, arg CreateSaleLineParams) (SaleLine, error)
+	CreateSalePayment(ctx context.Context, arg CreateSalePaymentParams) (SalePayment, error)
+	CreateSaleReturn(ctx context.Context, arg CreateSaleReturnParams) (SaleReturn, error)
+	CreateSaleReturnLine(ctx context.Context, arg CreateSaleReturnLineParams) (SaleReturnLine, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	// FIFO inventory. Both tables are append-only (INV-7), so there is no UPDATE
 	// and no DELETE in this file, and there never should be. Corrections are
@@ -46,11 +55,15 @@ type Querier interface {
 	DeleteOpnameLine(ctx context.Context, id string) error
 	DeleteSession(ctx context.Context, tokenHash string) error
 	DeleteSessionsForUser(ctx context.Context, userID string) error
+	GetCashSession(ctx context.Context, id string) (CashSession, error)
 	GetCustomer(ctx context.Context, id string) (Customer, error)
 	GetCustomerByCode(ctx context.Context, code string) (Customer, error)
 	GetLayerBalance(ctx context.Context, id string) (StockLayerBalance, error)
 	GetLegalEntity(ctx context.Context, id string) (LegalEntity, error)
 	GetLegalEntityByCode(ctx context.Context, code string) (LegalEntity, error)
+	// At most one open session per company, so this is a row or nothing. It is
+	// also the void window: a sale can be undone until its session closes.
+	GetOpenCashSession(ctx context.Context, entityID string) (CashSession, error)
 	GetOpname(ctx context.Context, id string) (StockOpname, error)
 	GetOwner(ctx context.Context, id string) (Owner, error)
 	GetOwnerByCode(ctx context.Context, code string) (Owner, error)
@@ -65,6 +78,9 @@ type Querier interface {
 	GetReceivable(ctx context.Context, id string) (ReceivableBalance, error)
 	GetRequest(ctx context.Context, clientRequestID string) (RequestLog, error)
 	GetRoleForUserInEntity(ctx context.Context, arg GetRoleForUserInEntityParams) (string, error)
+	GetSale(ctx context.Context, id string) (Sale, error)
+	GetSaleByInvoiceNo(ctx context.Context, arg GetSaleByInvoiceNoParams) (Sale, error)
+	GetSaleLine(ctx context.Context, id string) (SaleLine, error)
 	GetSession(ctx context.Context, tokenHash string) (Session, error)
 	GetStockLayer(ctx context.Context, id string) (StockLayer, error)
 	// On-hand for exactly one (product, owner). The count sheet snapshots this, and
@@ -84,6 +100,7 @@ type Querier interface {
 	ListAuditByPeriod(ctx context.Context, arg ListAuditByPeriodParams) ([]AuditLog, error)
 	// The trail for one record: what happened to this sale, this layer, this product.
 	ListAuditForRecord(ctx context.Context, arg ListAuditForRecordParams) ([]AuditLog, error)
+	ListCashSessions(ctx context.Context, entityID string) ([]CashSession, error)
 	ListCompanyBucketLayerBalances(ctx context.Context, entityID string) ([]StockLayerBalance, error)
 	// Products with no owner are the company bucket (R2.2). It is a distinct line
 	// on the margin report, so it gets a distinct query rather than a nullable
@@ -95,6 +112,10 @@ type Querier interface {
 	// owner and the faktur status that set the cost basis.
 	ListConsumptionsForMovement(ctx context.Context, movementID string) ([]ListConsumptionsForMovementRow, error)
 	ListCustomers(ctx context.Context, includeInactive interface{}) ([]Customer, error)
+	// The draws a sale line made, in FIFO order, so a return can give them back
+	// newest-first -- reversing the most recent draw before an older one keeps the
+	// layer history reading in the order things actually happened.
+	ListDrawsForMovement(ctx context.Context, arg ListDrawsForMovementParams) ([]ListDrawsForMovementRow, error)
 	// Stock on hand for one owner, per product. The company bucket is a distinct
 	// query below rather than a nullable parameter, matching how the margin report
 	// treats it (R2.2).
@@ -131,6 +152,14 @@ type Querier interface {
 	ListReceivablePayments(ctx context.Context, receivableID string) ([]ReceivablePayment, error)
 	ListReceivables(ctx context.Context, entityID string) ([]ReceivableBalance, error)
 	ListRolesForUser(ctx context.Context, userID string) ([]ListRolesForUserRow, error)
+	// The drill-down's first level (SPEC 4.2): the draws one sale made, with the
+	// layer each came from. The consumption rows are the authority for COGS; the
+	// figure on the sale header is a convenience for the sales report.
+	ListSaleConsumptions(ctx context.Context, movementID string) ([]ListSaleConsumptionsRow, error)
+	ListSaleLines(ctx context.Context, saleID string) ([]ListSaleLinesRow, error)
+	ListSalePayments(ctx context.Context, saleID string) ([]SalePayment, error)
+	ListSaleReturns(ctx context.Context, saleID string) ([]SaleReturn, error)
+	ListSales(ctx context.Context, arg ListSalesParams) ([]Sale, error)
 	// Everything currently on hand in one company, grouped the way a count is
 	// taken: per product, per owner. This is what the count sheet is generated
 	// from and what system_qty is snapshotted from.
@@ -138,6 +167,11 @@ type Querier interface {
 	ListSuppliers(ctx context.Context, includeInactive interface{}) ([]Supplier, error)
 	ListUsers(ctx context.Context) ([]AppUser, error)
 	MarkOpnamePosted(ctx context.Context, arg MarkOpnamePostedParams) (StockOpname, error)
+	// Sales, cash sessions, returns and voids. TASKS 2.1-2.10.
+	// A sale is immutable once written (INV-2): the only UPDATE here flips it to
+	// VOID, and the trigger in migration 009 refuses anything else.
+	// Keep this file ASCII-only -- see README.
+	OpenCashSession(ctx context.Context, arg OpenCashSessionParams) (CashSession, error)
 	RecordConsumption(ctx context.Context, arg RecordConsumptionParams) (StockConsumption, error)
 	RecordPayablePayment(ctx context.Context, arg RecordPayablePaymentParams) (PayablePayment, error)
 	RecordReceivablePayment(ctx context.Context, arg RecordReceivablePaymentParams) (ReceivablePayment, error)
@@ -154,6 +188,9 @@ type Querier interface {
 	// How much of one purchase line has already gone back, so a second return
 	// cannot send back more than ever arrived.
 	SumReturnedForPurchaseLine(ctx context.Context, purchaseLineID string) (int64, error)
+	// How much of one sale line has already come back, so a second return cannot
+	// send back more than was sold.
+	SumReturnedForSaleLine(ctx context.Context, saleLineID string) (int64, error)
 	// D-010: the reversals against one draw cannot exceed what it took. Returning
 	// four of three units sold is data entry to reject, not a correction. SQL
 	// cannot express that as a row check, so the service reads this and decides.
@@ -161,6 +198,11 @@ type Querier interface {
 	// Input PPN handed back when goods went back to the supplier (R12.2). Netted
 	// off the figure above; claiming credit on returned goods is the error.
 	SumReversedInputPPN(ctx context.Context, arg SumReversedInputPPNParams) (int64, error)
+	SumSessionCashRefunds(ctx context.Context, cashSessionID *string) (int64, error)
+	// The Z-report figures for one session: cash taken in, by method, plus what
+	// went back out as cash refunds. Voided sales are excluded -- a void means the
+	// sale did not happen, so its money was never in the drawer.
+	SumSessionPayments(ctx context.Context, cashSessionID *string) ([]SumSessionPaymentsRow, error)
 	TouchSession(ctx context.Context, arg TouchSessionParams) error
 	UpdateCustomer(ctx context.Context, arg UpdateCustomerParams) (Customer, error)
 	UpdateLegalEntity(ctx context.Context, arg UpdateLegalEntityParams) (LegalEntity, error)
@@ -168,6 +210,8 @@ type Querier interface {
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 	UpdateSupplier(ctx context.Context, arg UpdateSupplierParams) (Supplier, error)
 	UpsertOpnameLine(ctx context.Context, arg UpsertOpnameLineParams) (StockOpnameLine, error)
+	// The only UPDATE on sale, and the trigger allows no other shape.
+	VoidSale(ctx context.Context, arg VoidSaleParams) (Sale, error)
 	WriteAuditLog(ctx context.Context, arg WriteAuditLogParams) error
 }
 
