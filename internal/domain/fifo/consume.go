@@ -50,6 +50,12 @@ type Consumption struct {
 	QtyOut     int64
 	Cost       money.IDR
 	OccurredAt time.Time
+
+	// ReversesID names the draw this one undoes, and is empty on an ordinary
+	// draw. A reversal carries a negative QtyOut and Cost; a row that puts
+	// stock back without naming what it undoes is a stock increase disguised as
+	// a correction (D-010). See Reverse.
+	ReversesID string
 }
 
 // Result is what a draw produced: the rows to append, and their total.

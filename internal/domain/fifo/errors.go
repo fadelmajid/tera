@@ -27,7 +27,43 @@ var (
 	// ErrInvalidAcquisition means the amounts paid for a batch of stock could
 	// not be true.
 	ErrInvalidAcquisition = errors.New("fifo: invalid acquisition")
+
+	// ErrInvalidDraw means the consumption being reversed could not be true.
+	ErrInvalidDraw = errors.New("fifo: invalid draw")
+
+	// ErrOverReversal means more was sent back than the draw ever took.
+	ErrOverReversal = errors.New("fifo: reversal exceeds what was drawn")
 )
+
+// OverReversalError reports an attempt to give back more than was taken.
+//
+// Returning four of three units sold is data entry to reject, not a correction
+// (D-010). Left unchecked it would raise the layer's remaining quantity above
+// what it ever held, and the margin reversal would exceed the margin.
+type OverReversalError struct {
+	DrawID  string
+	LayerID string
+	// Requested is what this reversal asked for.
+	Requested int64
+	// Taken is what the original draw took, and AlreadyBack is how much of it
+	// earlier reversals have given back.
+	Taken       int64
+	AlreadyBack int64
+}
+
+// Error implements error.
+func (e *OverReversalError) Error() string {
+	return fmt.Sprintf(
+		"fifo: cannot return %d units against draw %s: it took %d and %d has already gone back, leaving %d",
+		e.Requested, e.DrawID, e.Taken, e.AlreadyBack, e.Taken-e.AlreadyBack,
+	)
+}
+
+// Unwrap lets errors.Is(err, ErrOverReversal) match.
+func (e *OverReversalError) Unwrap() error { return ErrOverReversal }
+
+// Remaining is how much of the draw could still legitimately be reversed.
+func (e *OverReversalError) Remaining() int64 { return e.Taken - e.AlreadyBack }
 
 // InsufficientStockError reports that an owner's layers hold less than was
 // asked for.
