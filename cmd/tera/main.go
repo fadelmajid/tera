@@ -13,11 +13,13 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/fadelmajid/tera/internal/service"
 	"github.com/fadelmajid/tera/internal/store"
+	"github.com/fadelmajid/tera/internal/store/gen"
 	terahttp "github.com/fadelmajid/tera/internal/transport/http"
 
 	// Embed the IANA timezone database. Book-year and business-day boundaries
@@ -93,6 +95,32 @@ func run() error {
 	purchasing := service.NewPurchasing(db, aud, time.Now)
 	opname := service.NewOpname(db, aud, time.Now)
 	opening := service.NewOpening(db, aud, time.Now)
+	sales := service.NewSales(db, aud, time.Now)
+
+	// The printer is attached to the server machine, which is where the cashier
+	// sits (ARCHITECTURE §1). Only the two facts that vary by model are
+	// configurable -- how it is attached and how wide the paper is -- because
+	// everything the driver sends is the portable ESC/POS subset and the shop's
+	// actual printer is not known yet.
+	//
+	// Unset means no printer. That is a supported state: the shop can trade and
+	// read receipts on screen until the hardware arrives.
+	printer := service.NewPrinter(service.PrinterConfig{
+		Addr:       os.Getenv("TERA_PRINTER_ADDR"),
+		Device:     os.Getenv("TERA_PRINTER_DEVICE"),
+		Width:      envInt("TERA_PRINTER_WIDTH", 32),
+		DrawerPin:  drawerPin(),
+		PartialCut: os.Getenv("TERA_PRINTER_PARTIAL_CUT") == "1",
+	})
+	printing := service.NewPrinting(gen.New(db), printer,
+		[]string{env("TERA_RECEIPT_FOOTER", "Terima kasih")}, time.Now)
+	if printing.Configured() {
+		logger.Info("printer siap", "addr", os.Getenv("TERA_PRINTER_ADDR"),
+			"device", os.Getenv("TERA_PRINTER_DEVICE"))
+	} else {
+		logger.Warn("printer belum dikonfigurasi; struk hanya bisa dilihat di layar",
+			"set", "TERA_PRINTER_ADDR atau TERA_PRINTER_DEVICE")
+	}
 
 	srv := terahttp.New(terahttp.Config{
 		Addr:         addr,
@@ -103,6 +131,8 @@ func run() error {
 		Purchasing:   purchasing,
 		Opname:       opname,
 		Opening:      opening,
+		Sales:        sales,
+		Printing:     printing,
 		Logger:       logger,
 		CookieSecure: os.Getenv("TERA_COOKIE_SECURE") == "1",
 	})
@@ -148,6 +178,30 @@ func bootstrap(ctx context.Context, auth *service.Auth, logger *slog.Logger) err
 	logger.Warn("pengguna pertama dibuat — catat kata sandi ini, tidak akan ditampilkan lagi",
 		"username", username, "password", password)
 	return nil
+}
+
+// drawerPin reads which of the printer's two drawer pins the cable uses.
+//
+// A fact about the wiring, not about the software, and there are exactly two
+// valid answers. Anything else is a typo and falls back to 0, the common
+// wiring, rather than sending a byte the printer will interpret as something
+// else entirely.
+func drawerPin() byte {
+	if envInt("TERA_DRAWER_PIN", 0) == 1 {
+		return 1
+	}
+	return 0
+}
+
+// envInt reads an integer setting, falling back when unset or unparsable. A
+// typo in the paper width should print a ragged receipt, not refuse to start.
+func envInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return fallback
 }
 
 func env(key, fallback string) string {

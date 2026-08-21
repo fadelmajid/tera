@@ -48,7 +48,13 @@ type Config struct {
 	Purchasing *service.Purchasing
 	Opname     *service.Opname
 	Opening    *service.Opening
-	Logger     *slog.Logger
+	// Sales is the till. Any role may ring one; voiding and returning reach
+	// backwards into finalised transactions and need manager or above (R7.1).
+	Sales *service.Sales
+	// Printing is optional. A shop with no printer configured must still be
+	// able to trade, so every path through it degrades to a preview.
+	Printing *service.Printing
+	Logger   *slog.Logger
 
 	// CookieSecure marks the session cookie Secure. Off by default: the shop
 	// LAN is plain HTTP with no certificate authority, and a Secure cookie
@@ -126,6 +132,7 @@ func Handler(cfg Config) stdhttp.Handler {
 
 			mountMasterData(r, cfg)
 			mountPurchasing(r, cfg)
+			mountSales(r, cfg)
 		}
 	})
 
