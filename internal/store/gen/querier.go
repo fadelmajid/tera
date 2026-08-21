@@ -20,6 +20,11 @@ type Querier interface {
 	CreateOwner(ctx context.Context, arg CreateOwnerParams) (Owner, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
+	// FIFO inventory. Both tables are append-only (INV-7), so there is no UPDATE
+	// and no DELETE in this file, and there never should be. Corrections are
+	// compensating rows (INV-2, D-010). The triggers in migration 005 enforce it,
+	// but the absence here is the first thing a reader should notice.
+	CreateStockLayer(ctx context.Context, arg CreateStockLayerParams) (StockLayer, error)
 	CreateSupplier(ctx context.Context, arg CreateSupplierParams) (Supplier, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (AppUser, error)
 	DeleteExpiredSessions(ctx context.Context, now int64) error
@@ -27,6 +32,7 @@ type Querier interface {
 	DeleteSessionsForUser(ctx context.Context, userID string) error
 	GetCustomer(ctx context.Context, id string) (Customer, error)
 	GetCustomerByCode(ctx context.Context, code string) (Customer, error)
+	GetLayerBalance(ctx context.Context, id string) (StockLayerBalance, error)
 	GetLegalEntity(ctx context.Context, id string) (LegalEntity, error)
 	GetLegalEntityByCode(ctx context.Context, code string) (LegalEntity, error)
 	GetOwner(ctx context.Context, id string) (Owner, error)
@@ -39,6 +45,7 @@ type Querier interface {
 	GetRequest(ctx context.Context, clientRequestID string) (RequestLog, error)
 	GetRoleForUserInEntity(ctx context.Context, arg GetRoleForUserInEntityParams) (string, error)
 	GetSession(ctx context.Context, tokenHash string) (Session, error)
+	GetStockLayer(ctx context.Context, id string) (StockLayer, error)
 	GetSupplier(ctx context.Context, id string) (Supplier, error)
 	GetSupplierByCode(ctx context.Context, code string) (Supplier, error)
 	GetUser(ctx context.Context, id string) (AppUser, error)
@@ -48,11 +55,34 @@ type Querier interface {
 	ListAuditByPeriod(ctx context.Context, arg ListAuditByPeriodParams) ([]AuditLog, error)
 	// The trail for one record: what happened to this sale, this layer, this product.
 	ListAuditForRecord(ctx context.Context, arg ListAuditForRecordParams) ([]AuditLog, error)
+	ListCompanyBucketLayerBalances(ctx context.Context, entityID string) ([]StockLayerBalance, error)
 	// Products with no owner are the company bucket (R2.2). It is a distinct line
 	// on the margin report, so it gets a distinct query rather than a nullable
 	// parameter that reads as an afterthought.
 	ListCompanyBucketProducts(ctx context.Context) ([]Product, error)
+	ListConsumptionsForLayer(ctx context.Context, layerID string) ([]StockConsumption, error)
+	// The drill-down, one level down: which layers did this sale draw from, and
+	// what did each cost (SPEC 4.2). Joined to the layer so the answer carries the
+	// owner and the faktur status that set the cost basis.
+	ListConsumptionsForMovement(ctx context.Context, movementID string) ([]ListConsumptionsForMovementRow, error)
 	ListCustomers(ctx context.Context, includeInactive interface{}) ([]Customer, error)
+	// Stock on hand for one owner, per product. The company bucket is a distinct
+	// query below rather than a nullable parameter, matching how the margin report
+	// treats it (R2.2).
+	ListLayerBalancesByOwner(ctx context.Context, arg ListLayerBalancesByOwnerParams) ([]StockLayerBalance, error)
+	// The layers one purchase created. Needed to reverse it (R12.2).
+	ListLayersBySourceDoc(ctx context.Context, arg ListLayersBySourceDocParams) ([]StockLayer, error)
+	// The FIFO candidate set for a draw, oldest first, ties broken by id (SPEC 3.3).
+	//
+	// Deliberately NOT filtered by owner. internal/domain/fifo does the owner
+	// scoping itself and will only ever draw from matching layers (INV-8); handing
+	// it every owner's layers is what lets an insufficient-stock error report how
+	// much stock other owners hold -- the difference between an error a shopkeeper
+	// can act on and one that looks like a bug with a full shelf in view.
+	//
+	// Exhausted layers are dropped because they contribute nothing either way. They
+	// stay in the table forever regardless; nothing here deletes.
+	ListLayersForConsumption(ctx context.Context, arg ListLayersForConsumptionParams) ([]StockLayerBalance, error)
 	ListLegalEntities(ctx context.Context) ([]LegalEntity, error)
 	ListOwners(ctx context.Context, includeInactive interface{}) ([]Owner, error)
 	ListProducts(ctx context.Context, includeInactive interface{}) ([]Product, error)
@@ -60,12 +90,17 @@ type Querier interface {
 	ListRolesForUser(ctx context.Context, userID string) ([]ListRolesForUserRow, error)
 	ListSuppliers(ctx context.Context, includeInactive interface{}) ([]Supplier, error)
 	ListUsers(ctx context.Context) ([]AppUser, error)
+	RecordConsumption(ctx context.Context, arg RecordConsumptionParams) (StockConsumption, error)
 	ReleaseRequest(ctx context.Context, clientRequestID string) error
 	// Frees claims abandoned by a crash, so a retry is not blocked forever.
 	ReleaseStaleClaims(ctx context.Context, olderThan int64) error
 	RevokeRole(ctx context.Context, arg RevokeRoleParams) error
 	SetUserActive(ctx context.Context, arg SetUserActiveParams) error
 	SetUserPassword(ctx context.Context, arg SetUserPasswordParams) error
+	// D-010: the reversals against one draw cannot exceed what it took. Returning
+	// four of three units sold is data entry to reject, not a correction. SQL
+	// cannot express that as a row check, so the service reads this and decides.
+	SumReversedAgainstConsumption(ctx context.Context, reversesID *string) (int64, error)
 	TouchSession(ctx context.Context, arg TouchSessionParams) error
 	UpdateCustomer(ctx context.Context, arg UpdateCustomerParams) (Customer, error)
 	UpdateLegalEntity(ctx context.Context, arg UpdateLegalEntityParams) (LegalEntity, error)

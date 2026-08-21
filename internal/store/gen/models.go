@@ -100,6 +100,54 @@ type Session struct {
 	ExpiresAt  int64
 }
 
+type StockConsumption struct {
+	ID           string
+	LayerID      string
+	MovementID   string
+	MovementType string
+	QtyOut       int64
+	CostIdr      int64
+	OccurredAt   int64
+	BusinessDate string
+	ReversesID   *string
+	CreatedAt    int64
+}
+
+type StockLayer struct {
+	ID             string
+	EntityID       string
+	ProductID      string
+	OwnerID        *string
+	AcquiredAt     int64
+	BusinessDate   string
+	Source         string
+	SourceDocID    *string
+	QtyIn          int64
+	CostTotalIdr   int64
+	FakturReceived int64
+	PpnPaidIdr     int64
+	ExpiryDate     *string
+	CreatedAt      int64
+}
+
+type StockLayerBalance struct {
+	ID             string
+	EntityID       string
+	ProductID      string
+	OwnerID        *string
+	AcquiredAt     int64
+	BusinessDate   string
+	Source         string
+	SourceDocID    *string
+	QtyIn          int64
+	QtyConsumed    int64
+	QtyRemaining   int64
+	CostTotalIdr   int64
+	FakturReceived int64
+	PpnPaidIdr     int64
+	ExpiryDate     *string
+}
+
 type Supplier struct {
 	ID           string
 	Code         string
