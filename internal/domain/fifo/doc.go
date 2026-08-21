@@ -38,5 +38,21 @@
 // Which *period* a return lands in is a separate and still open question
 // (SPEC §4.4).
 //
-// TASKS 1.2–1.4.
+// # Unit cost is derived, and every draw is a prefix of the layer
+//
+// A layer stores its total and its quantity; the per-unit cost is computed when
+// needed and never stored (SPEC §1). Seven units at Rp 100.000 is
+// Rp 14.285,714… each, and a rounded unit cost multiplied back out loses rupiah
+// on every draw.
+//
+// Each draw costs Layer.CostAt(after) − Layer.CostAt(before) — the difference
+// between two prefixes of the layer. The intermediate terms cancel, so the
+// draws over a layer's whole life sum to exactly CostTotal by construction,
+// whatever their order, sizes, or spacing in time. That last part is why it is
+// a prefix difference rather than "the last draw absorbs the remainder": at the
+// moment of a draw, nothing knows whether it is the last one, and a batch
+// half-sold in March and finished in September has no shared state to carry a
+// remainder through.
+//
+// TASKS 1.2–1.4, and the cost basis of 1.6–1.7.
 package fifo
