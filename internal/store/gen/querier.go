@@ -17,8 +17,23 @@ type Querier interface {
 	CountUsers(ctx context.Context) (int64, error)
 	CreateCustomer(ctx context.Context, arg CreateCustomerParams) (Customer, error)
 	CreateLegalEntity(ctx context.Context, arg CreateLegalEntityParams) (LegalEntity, error)
+	// Stock opname. TASKS 1.10, R12.4-5. Keep this file ASCII-only -- see README.
+	CreateOpname(ctx context.Context, arg CreateOpnameParams) (StockOpname, error)
+	CreateOpnamePosting(ctx context.Context, arg CreateOpnamePostingParams) (StockOpnamePosting, error)
 	CreateOwner(ctx context.Context, arg CreateOwnerParams) (Owner, error)
+	// Hutang and piutang. TASKS 1.11, R5.5-5.6, R5.8, R11.5.
+	// Balances are derived from the payment rows, never stored.
+	// Keep this file ASCII-only -- see README.
+	CreatePayable(ctx context.Context, arg CreatePayableParams) (Payable, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
+	// Purchases. Immutable once written (INV-2), so there is no UPDATE and no
+	// DELETE here; a correction is a purchase return.
+	// Keep this file ASCII-only -- see README.
+	CreatePurchase(ctx context.Context, arg CreatePurchaseParams) (Purchase, error)
+	CreatePurchaseLine(ctx context.Context, arg CreatePurchaseLineParams) (PurchaseLine, error)
+	CreatePurchaseReturn(ctx context.Context, arg CreatePurchaseReturnParams) (PurchaseReturn, error)
+	CreatePurchaseReturnLine(ctx context.Context, arg CreatePurchaseReturnLineParams) (PurchaseReturnLine, error)
+	CreateReceivable(ctx context.Context, arg CreateReceivableParams) (Receivable, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	// FIFO inventory. Both tables are append-only (INV-7), so there is no UPDATE
 	// and no DELETE in this file, and there never should be. Corrections are
@@ -28,6 +43,7 @@ type Querier interface {
 	CreateSupplier(ctx context.Context, arg CreateSupplierParams) (Supplier, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (AppUser, error)
 	DeleteExpiredSessions(ctx context.Context, now int64) error
+	DeleteOpnameLine(ctx context.Context, id string) error
 	DeleteSession(ctx context.Context, tokenHash string) error
 	DeleteSessionsForUser(ctx context.Context, userID string) error
 	GetCustomer(ctx context.Context, id string) (Customer, error)
@@ -35,22 +51,35 @@ type Querier interface {
 	GetLayerBalance(ctx context.Context, id string) (StockLayerBalance, error)
 	GetLegalEntity(ctx context.Context, id string) (LegalEntity, error)
 	GetLegalEntityByCode(ctx context.Context, code string) (LegalEntity, error)
+	GetOpname(ctx context.Context, id string) (StockOpname, error)
 	GetOwner(ctx context.Context, id string) (Owner, error)
 	GetOwnerByCode(ctx context.Context, code string) (Owner, error)
+	GetPayable(ctx context.Context, id string) (PayableBalance, error)
 	GetProduct(ctx context.Context, id string) (Product, error)
 	// Barcode lookup for the scanner (R9.3). The unique partial index makes this
 	// a single row or none.
 	GetProductByBarcode(ctx context.Context, barcode *string) (Product, error)
 	GetProductByCode(ctx context.Context, code string) (Product, error)
+	GetPurchase(ctx context.Context, id string) (Purchase, error)
+	GetPurchaseLine(ctx context.Context, id string) (PurchaseLine, error)
+	GetReceivable(ctx context.Context, id string) (ReceivableBalance, error)
 	GetRequest(ctx context.Context, clientRequestID string) (RequestLog, error)
 	GetRoleForUserInEntity(ctx context.Context, arg GetRoleForUserInEntityParams) (string, error)
 	GetSession(ctx context.Context, tokenHash string) (Session, error)
 	GetStockLayer(ctx context.Context, id string) (StockLayer, error)
+	// On-hand for exactly one (product, owner). The count sheet snapshots this, and
+	// posting re-reads it to refuse a shortfall bigger than what is actually there.
+	GetStockOnHandForOwner(ctx context.Context, arg GetStockOnHandForOwnerParams) (int64, error)
 	GetSupplier(ctx context.Context, id string) (Supplier, error)
 	GetSupplierByCode(ctx context.Context, code string) (Supplier, error)
 	GetUser(ctx context.Context, id string) (AppUser, error)
 	GetUserByUsername(ctx context.Context, username string) (AppUser, error)
 	GrantRole(ctx context.Context, arg GrantRoleParams) error
+	// The unit cost a surplus line defaults to: the most recent layer of the same
+	// product and owner. Found stock is nearly always a miscounted recent delivery,
+	// so that layer is the best available answer. Derived from the layer total and
+	// quantity, never a stored per-unit figure (SPEC 1).
+	LatestLayerUnitCost(ctx context.Context, arg LatestLayerUnitCostParams) (int64, error)
 	ListAuditByActor(ctx context.Context, arg ListAuditByActorParams) ([]AuditLog, error)
 	ListAuditByPeriod(ctx context.Context, arg ListAuditByPeriodParams) ([]AuditLog, error)
 	// The trail for one record: what happened to this sale, this layer, this product.
@@ -84,29 +113,61 @@ type Querier interface {
 	// stay in the table forever regardless; nothing here deletes.
 	ListLayersForConsumption(ctx context.Context, arg ListLayersForConsumptionParams) ([]StockLayerBalance, error)
 	ListLegalEntities(ctx context.Context) ([]LegalEntity, error)
+	// The variance report (R12.4). Joined to product and owner so the person
+	// signing it off sees names, not ids.
+	ListOpnameLines(ctx context.Context, opnameID string) ([]ListOpnameLinesRow, error)
+	ListOpnamePostings(ctx context.Context, opnameID string) ([]StockOpnamePosting, error)
+	ListOpnames(ctx context.Context, entityID string) ([]StockOpname, error)
+	ListOutstandingPayables(ctx context.Context, entityID string) ([]PayableBalance, error)
+	ListOutstandingReceivables(ctx context.Context, entityID string) ([]ReceivableBalance, error)
 	ListOwners(ctx context.Context, includeInactive interface{}) ([]Owner, error)
+	ListPayablePayments(ctx context.Context, payableID string) ([]PayablePayment, error)
+	ListPayables(ctx context.Context, entityID string) ([]PayableBalance, error)
 	ListProducts(ctx context.Context, includeInactive interface{}) ([]Product, error)
 	ListProductsByOwner(ctx context.Context, ownerID *string) ([]Product, error)
+	ListPurchaseLines(ctx context.Context, purchaseID string) ([]ListPurchaseLinesRow, error)
+	ListPurchaseReturns(ctx context.Context, purchaseID string) ([]PurchaseReturn, error)
+	ListPurchases(ctx context.Context, arg ListPurchasesParams) ([]Purchase, error)
+	ListReceivablePayments(ctx context.Context, receivableID string) ([]ReceivablePayment, error)
+	ListReceivables(ctx context.Context, entityID string) ([]ReceivableBalance, error)
 	ListRolesForUser(ctx context.Context, userID string) ([]ListRolesForUserRow, error)
+	// Everything currently on hand in one company, grouped the way a count is
+	// taken: per product, per owner. This is what the count sheet is generated
+	// from and what system_qty is snapshotted from.
+	ListStockOnHandByOwner(ctx context.Context, entityID string) ([]ListStockOnHandByOwnerRow, error)
 	ListSuppliers(ctx context.Context, includeInactive interface{}) ([]Supplier, error)
 	ListUsers(ctx context.Context) ([]AppUser, error)
+	MarkOpnamePosted(ctx context.Context, arg MarkOpnamePostedParams) (StockOpname, error)
 	RecordConsumption(ctx context.Context, arg RecordConsumptionParams) (StockConsumption, error)
+	RecordPayablePayment(ctx context.Context, arg RecordPayablePaymentParams) (PayablePayment, error)
+	RecordReceivablePayment(ctx context.Context, arg RecordReceivablePaymentParams) (ReceivablePayment, error)
 	ReleaseRequest(ctx context.Context, clientRequestID string) error
 	// Frees claims abandoned by a crash, so a retry is not blocked forever.
 	ReleaseStaleClaims(ctx context.Context, olderThan int64) error
 	RevokeRole(ctx context.Context, arg RevokeRoleParams) error
 	SetUserActive(ctx context.Context, arg SetUserActiveParams) error
 	SetUserPassword(ctx context.Context, arg SetUserPasswordParams) error
+	// The input side of the PPN position (SPEC 2.4): purchases WHERE the faktur was
+	// received. Purchases without one contribute nothing here -- their PPN went
+	// into the cost layer instead. The filter is the whole point of the report.
+	SumCreditableInputPPN(ctx context.Context, arg SumCreditableInputPPNParams) (int64, error)
+	// How much of one purchase line has already gone back, so a second return
+	// cannot send back more than ever arrived.
+	SumReturnedForPurchaseLine(ctx context.Context, purchaseLineID string) (int64, error)
 	// D-010: the reversals against one draw cannot exceed what it took. Returning
 	// four of three units sold is data entry to reject, not a correction. SQL
 	// cannot express that as a row check, so the service reads this and decides.
 	SumReversedAgainstConsumption(ctx context.Context, reversesID *string) (int64, error)
+	// Input PPN handed back when goods went back to the supplier (R12.2). Netted
+	// off the figure above; claiming credit on returned goods is the error.
+	SumReversedInputPPN(ctx context.Context, arg SumReversedInputPPNParams) (int64, error)
 	TouchSession(ctx context.Context, arg TouchSessionParams) error
 	UpdateCustomer(ctx context.Context, arg UpdateCustomerParams) (Customer, error)
 	UpdateLegalEntity(ctx context.Context, arg UpdateLegalEntityParams) (LegalEntity, error)
 	UpdateOwner(ctx context.Context, arg UpdateOwnerParams) (Owner, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 	UpdateSupplier(ctx context.Context, arg UpdateSupplierParams) (Supplier, error)
+	UpsertOpnameLine(ctx context.Context, arg UpsertOpnameLineParams) (StockOpnameLine, error)
 	WriteAuditLog(ctx context.Context, arg WriteAuditLogParams) error
 }
 

@@ -66,6 +66,47 @@ type Owner struct {
 	UpdatedAt int64
 }
 
+type Payable struct {
+	ID         string
+	EntityID   string
+	SupplierID string
+	Source     string
+	PurchaseID *string
+	InvoiceNo  *string
+	AmountIdr  int64
+	IncurredOn string
+	DueDate    *string
+	Note       *string
+	CreatedBy  *string
+	CreatedAt  int64
+}
+
+type PayableBalance struct {
+	ID             string
+	EntityID       string
+	SupplierID     string
+	Source         string
+	PurchaseID     *string
+	InvoiceNo      *string
+	AmountIdr      int64
+	PaidIdr        int64
+	OutstandingIdr int64
+	IncurredOn     string
+	DueDate        *string
+	Note           *string
+}
+
+type PayablePayment struct {
+	ID        string
+	PayableID string
+	AmountIdr int64
+	PaidOn    string
+	Method    string
+	Note      *string
+	CreatedBy *string
+	CreatedAt int64
+}
+
 type Product struct {
 	ID           string
 	Code         string
@@ -78,6 +119,108 @@ type Product struct {
 	IsActive     int64
 	CreatedAt    int64
 	UpdatedAt    int64
+}
+
+type Purchase struct {
+	ID             string
+	EntityID       string
+	SupplierID     string
+	InvoiceNo      *string
+	OccurredAt     int64
+	BusinessDate   string
+	FakturReceived int64
+	FakturNo       *string
+	SubtotalIdr    int64
+	PpnIdr         int64
+	TotalIdr       int64
+	IsCredit       int64
+	DueDate        *string
+	Note           *string
+	CreatedBy      *string
+	CreatedAt      int64
+}
+
+type PurchaseLine struct {
+	ID               string
+	PurchaseID       string
+	ProductID        string
+	OwnerID          *string
+	Qty              int64
+	UnitPriceIdr     int64
+	SubtotalIdr      int64
+	PpnIdr           int64
+	GrossIdr         int64
+	CostTotalIdr     int64
+	CreditablePpnIdr int64
+	StockLayerID     string
+	ExpiryDate       *string
+	CreatedAt        int64
+}
+
+type PurchaseReturn struct {
+	ID             string
+	EntityID       string
+	PurchaseID     string
+	OccurredAt     int64
+	BusinessDate   string
+	Reason         string
+	CostIdr        int64
+	PpnReversedIdr int64
+	CreatedBy      *string
+	CreatedAt      int64
+}
+
+type PurchaseReturnLine struct {
+	ID               string
+	PurchaseReturnID string
+	PurchaseLineID   string
+	StockLayerID     string
+	ConsumptionID    string
+	Qty              int64
+	CostIdr          int64
+	PpnReversedIdr   int64
+	CreatedAt        int64
+}
+
+type Receivable struct {
+	ID         string
+	EntityID   string
+	CustomerID string
+	Source     string
+	SaleID     *string
+	InvoiceNo  *string
+	AmountIdr  int64
+	IncurredOn string
+	DueDate    *string
+	Note       *string
+	CreatedBy  *string
+	CreatedAt  int64
+}
+
+type ReceivableBalance struct {
+	ID             string
+	EntityID       string
+	CustomerID     string
+	Source         string
+	SaleID         *string
+	InvoiceNo      *string
+	AmountIdr      int64
+	PaidIdr        int64
+	OutstandingIdr int64
+	IncurredOn     string
+	DueDate        *string
+	Note           *string
+}
+
+type ReceivablePayment struct {
+	ID           string
+	ReceivableID string
+	AmountIdr    int64
+	PaidOn       string
+	Method       string
+	Note         *string
+	CreatedBy    *string
+	CreatedAt    int64
 }
 
 type RequestLog struct {
@@ -146,6 +289,43 @@ type StockLayerBalance struct {
 	FakturReceived int64
 	PpnPaidIdr     int64
 	ExpiryDate     *string
+}
+
+type StockOpname struct {
+	ID           string
+	EntityID     string
+	Status       string
+	CountedAt    int64
+	BusinessDate string
+	Note         *string
+	PostedAt     *int64
+	PostedBy     *string
+	CreatedBy    *string
+	CreatedAt    int64
+}
+
+type StockOpnameLine struct {
+	ID          string
+	OpnameID    string
+	ProductID   string
+	OwnerID     *string
+	SystemQty   int64
+	CountedQty  int64
+	Variance    int64
+	ReasonCode  *string
+	ReasonNote  *string
+	UnitCostIdr *int64
+	CreatedAt   int64
+}
+
+type StockOpnamePosting struct {
+	ID            string
+	OpnameLineID  string
+	StockLayerID  *string
+	ConsumptionID *string
+	Qty           int64
+	CostIdr       int64
+	CreatedAt     int64
 }
 
 type Supplier struct {
