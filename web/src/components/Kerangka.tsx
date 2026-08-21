@@ -9,6 +9,8 @@ import { PelangganPage } from '../pages/Pelanggan'
 import { PembelianPage } from '../pages/Pembelian'
 import { OpnamePage } from '../pages/Opname'
 import { SaldoAwalPage } from '../pages/SaldoAwal'
+import { KasirPage } from '../pages/Kasir'
+import { SesiKasPage } from '../pages/SesiKas'
 
 /**
  * The application shell.
@@ -67,6 +69,10 @@ export function Kerangka({
           <NavLink to="/" end>
             Beranda
           </NavLink>
+          {/* The till comes first: it is what the shop uses all day, and every
+              role may use it. */}
+          <NavLink to="/kasir">Kasir</NavLink>
+          <NavLink to="/sesi-kas">Sesi kas</NavLink>
           <NavLink to="/produk">Produk</NavLink>
           <NavLink to="/owner">Owner</NavLink>
           <NavLink to="/pemasok">Pemasok</NavLink>
@@ -118,6 +124,11 @@ export function Kerangka({
             path="/saldo-awal"
             element={bolehBeli ? <SaldoAwalPage entityId={entityId} /> : <TidakBoleh />}
           />
+          <Route
+            path="/kasir"
+            element={<KasirPage entityId={entityId} isPKP={entity?.is_pkp ?? false} />}
+          />
+          <Route path="/sesi-kas" element={<SesiKasPage entityId={entityId} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
@@ -135,7 +146,7 @@ function Beranda({ entity, bolehMargin }: { entity: Entity | undefined; bolehMar
           {entity?.is_pkp ? ' — PKP, wajib memungut PPN.' : ' — non-PKP, tidak memungut PPN.'}
         </p>
         <p className="kosong">
-          Penjualan dan laporan menyusul. Yang tersedia saat ini: data master, pembelian, opname
+          Laporan menyusul. Yang tersedia saat ini: kasir, sesi kas, data master, pembelian, opname
           stok, dan saldo awal.
         </p>
         {!bolehMargin && (
