@@ -25,6 +25,7 @@ type world struct {
 	purch    *service.Purchasing
 	opname   *service.Opname
 	opening  *service.Opening
+	sales    *service.Sales
 	actor    service.Actor
 	entityID string
 	supplier string
@@ -94,6 +95,7 @@ func newWorld(t *testing.T, isPKP bool) (world, context.Context) {
 		db: db, q: q,
 		purch:   service.NewPurchasing(db, aud, now),
 		opname:  service.NewOpname(db, aud, now),
+		sales:   service.NewSales(db, aud, now),
 		opening: service.NewOpening(db, aud, now),
 		actor: service.Actor{
 			LegalEntityID: entity.ID, ClientRequestID: store.NewID(),
