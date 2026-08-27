@@ -1,0 +1,103 @@
+{
+  "about": "PPN on tax-exclusive prices: tax = round(base x rate), total = base + tax (SPEC 2.2). TASKS 5.6.",
+  "verification": "Arithmetic verified by hand against the rule stated in each case. The RULE ITSELF -- 12% statutory on a DPP nilai lain of 11/12, giving an effective 11% -- is what needs checking against DJP sources and a konsultan pajak before this touches real books.",
+  "rules": {
+    "ppn-exclusive": {
+      "id": "rule-exclusive",
+      "entity_id": "entity-pkp",
+      "type": "PPN",
+      "rate_bp": 1200,
+      "dpp_num": 11,
+      "dpp_den": 12,
+      "inclusive": false,
+      "level": "LINE",
+      "rounding": "HALF_UP",
+      "rounding_unit": 1,
+      "valid_from": "2025-01-01",
+      "valid_to": "",
+      "legal_ref": "PMK 131/2024"
+    }
+  },
+  "cases": [
+    {
+      "name": "one round million, tax added on top",
+      "why": "The plainest possible statement of the effective rate: 12% of 11/12 of Rp 1.000.000 is Rp 110.000. If this figure is wrong, everything downstream of it is.",
+      "rule": "ppn-exclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [{ "ref": "L1", "amount": 1000000 }],
+      "expect": {
+        "dpp": 1000000,
+        "tax": 110000,
+        "grand_total": 1110000,
+        "accrued_without_faktur": false,
+        "lines": [{ "ref": "L1", "dpp": 1000000, "tax": 110000, "total": 1110000 }]
+      }
+    },
+    {
+      "name": "a half rupiah rounds up, not away",
+      "why": "Rp 150 x 11/100 is exactly Rp 16,50 -- a true half, not a repeating fraction. HALF_UP takes it to Rp 17. Truncation would take it to Rp 16 and would be wrong in the taxpayer's favour on roughly half of all lines, which is the kind of error that accumulates quietly and is found by an auditor rather than by us.",
+      "rule": "ppn-exclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [{ "ref": "L1", "amount": 150 }],
+      "expect": {
+        "dpp": 150,
+        "tax": 17,
+        "grand_total": 167,
+        "accrued_without_faktur": false,
+        "lines": [{ "ref": "L1", "dpp": 150, "tax": 17, "total": 167 }]
+      }
+    },
+    {
+      "name": "every exact half in the first thousand rupiah",
+      "why": "Rp 50, Rp 150 and Rp 250 are the amounts under Rp 300 whose PPN lands on an exact half: 5,50 / 16,50 / 27,50. Rounded together in one cart so a change to the rounding mode cannot pass by fixing one case and breaking another.",
+      "rule": "ppn-exclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [
+        { "ref": "L1", "amount": 50 },
+        { "ref": "L2", "amount": 150 },
+        { "ref": "L3", "amount": 250 }
+      ],
+      "expect": {
+        "dpp": 450,
+        "tax": 51,
+        "grand_total": 501,
+        "accrued_without_faktur": false,
+        "lines": [
+          { "ref": "L1", "dpp": 50, "tax": 6, "total": 56 },
+          { "ref": "L2", "dpp": 150, "tax": 17, "total": 167 },
+          { "ref": "L3", "dpp": 250, "tax": 28, "total": 278 }
+        ]
+      }
+    },
+    {
+      "name": "three unequal lines, rounded on each",
+      "why": "An ordinary basket. Rp 33.333 x 11/100 is Rp 3.666,63, the case where the third decimal decides. The point of the case is the total: Rp 245.833 of DPP and Rp 27.042 of PPN come to Rp 272.875 with nothing left over.",
+      "rule": "ppn-exclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [
+        { "ref": "L1", "amount": 125000 },
+        { "ref": "L2", "amount": 87500 },
+        { "ref": "L3", "amount": 33333 }
+      ],
+      "expect": {
+        "dpp": 245833,
+        "tax": 27042,
+        "grand_total": 272875,
+        "accrued_without_faktur": false,
+        "lines": [
+          { "ref": "L1", "dpp": 125000, "tax": 13750, "total": 138750 },
+          { "ref": "L2", "dpp": 87500, "tax": 9625, "total": 97125 },
+          { "ref": "L3", "dpp": 33333, "tax": 3667, "total": 37000 }
+        ]
+      }
+    }
+  ]
+}

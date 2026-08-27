@@ -1,0 +1,121 @@
+{
+  "about": "Mixed carts: taxed and untaxed lines on one invoice (SPEC 7, acceptance criterion 2). TASKS 5.6.",
+  "verification": "Arithmetic verified by hand. WHICH LINES ARE EXEMPT IS NOT ANSWERED HERE and no product in this system is flagged exempt yet -- see ppn_unverified.json. These cases prove the engine keeps the invoice consistent when some lines are untaxed; they do not claim to know which of this catalogue those are.",
+  "rules": {
+    "ppn-inclusive": {
+      "id": "rule-inclusive",
+      "entity_id": "entity-pkp",
+      "type": "PPN",
+      "rate_bp": 1200, "dpp_num": 11, "dpp_den": 12,
+      "inclusive": true, "level": "LINE",
+      "rounding": "HALF_UP", "rounding_unit": 1,
+      "valid_from": "2025-01-01", "valid_to": "", "legal_ref": "PMK 131/2024"
+    },
+    "ppn-exclusive": {
+      "id": "rule-exclusive",
+      "entity_id": "entity-pkp",
+      "type": "PPN",
+      "rate_bp": 1200, "dpp_num": 11, "dpp_den": 12,
+      "inclusive": false, "level": "LINE",
+      "rounding": "HALF_UP", "rounding_unit": 1,
+      "valid_from": "2025-01-01", "valid_to": "", "legal_ref": "PMK 131/2024"
+    },
+    "ppn-invoice-exclusive": {
+      "id": "rule-invoice-exclusive",
+      "entity_id": "entity-pkp",
+      "type": "PPN",
+      "rate_bp": 1200, "dpp_num": 11, "dpp_den": 12,
+      "inclusive": false, "level": "INVOICE",
+      "rounding": "HALF_UP", "rounding_unit": 1,
+      "valid_from": "2025-01-01", "valid_to": "", "legal_ref": "PMK 131/2024"
+    }
+  },
+  "cases": [
+    {
+      "name": "an exempt line sits untaxed between two taxed ones, inclusive",
+      "why": "The exempt line contributes its whole amount to the DPP and nothing to the PPN, and the two taxed lines are unaffected by sitting next to it. Rp 344.595 of DPP and Rp 10.405 of PPN come to the Rp 355.000 the customer pays.",
+      "rule": "ppn-inclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [
+        { "ref": "L1", "amount": 100000 },
+        { "ref": "L2", "amount": 250000, "exempt": true },
+        { "ref": "L3", "amount": 5000 }
+      ],
+      "expect": {
+        "dpp": 344595, "tax": 10405, "grand_total": 355000,
+        "accrued_without_faktur": false,
+        "lines": [
+          { "ref": "L1", "dpp": 90090, "tax": 9910, "total": 100000 },
+          { "ref": "L2", "dpp": 250000, "tax": 0, "total": 250000 },
+          { "ref": "L3", "dpp": 4505, "tax": 495, "total": 5000 }
+        ]
+      }
+    },
+    {
+      "name": "an exempt line sits untaxed between two taxed ones, exclusive",
+      "why": "The same basket priced the other way. The exempt line adds nothing to the tax, so the customer pays Rp 366.550 rather than Rp 394.050 -- the difference between exempting one line and forgetting to.",
+      "rule": "ppn-exclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [
+        { "ref": "L1", "amount": 100000 },
+        { "ref": "L2", "amount": 250000, "exempt": true },
+        { "ref": "L3", "amount": 5000 }
+      ],
+      "expect": {
+        "dpp": 355000, "tax": 11550, "grand_total": 366550,
+        "accrued_without_faktur": false,
+        "lines": [
+          { "ref": "L1", "dpp": 100000, "tax": 11000, "total": 111000 },
+          { "ref": "L2", "dpp": 250000, "tax": 0, "total": 250000 },
+          { "ref": "L3", "dpp": 5000, "tax": 550, "total": 5550 }
+        ]
+      }
+    },
+    {
+      "name": "invoice-level rounding ignores the exempt line when it works out the invoice tax",
+      "why": "The invoice PPN is computed on Rp 105.000 -- the taxable lines only -- and never on the Rp 355.000 the customer pays. Getting this wrong would tax the exempt goods at the invoice level while showing them untaxed on their own line, which is both an overcharge and an invoice that does not explain itself.",
+      "rule": "ppn-invoice-exclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [
+        { "ref": "L1", "amount": 100000 },
+        { "ref": "L2", "amount": 250000, "exempt": true },
+        { "ref": "L3", "amount": 5000 }
+      ],
+      "expect": {
+        "dpp": 355000, "tax": 11550, "grand_total": 366550,
+        "accrued_without_faktur": false,
+        "lines": [
+          { "ref": "L1", "dpp": 100000, "tax": 11000, "total": 111000 },
+          { "ref": "L2", "dpp": 250000, "tax": 0, "total": 250000 },
+          { "ref": "L3", "dpp": 5000, "tax": 550, "total": 5550 }
+        ]
+      }
+    },
+    {
+      "name": "an entirely exempt cart at a PKP entity",
+      "why": "A rule is in force and nothing is levied under it. The result must be untaxed rather than taxed-at-zero: the sale carries no output PPN into the position report and nothing on the receipt claims otherwise.",
+      "rule": "ppn-inclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": false,
+      "lines": [
+        { "ref": "L1", "amount": 250000, "exempt": true },
+        { "ref": "L2", "amount": 100000, "exempt": true }
+      ],
+      "expect": {
+        "dpp": 350000, "tax": 0, "grand_total": 350000,
+        "accrued_without_faktur": false,
+        "lines": [
+          { "ref": "L1", "dpp": 250000, "tax": 0, "total": 250000 },
+          { "ref": "L2", "dpp": 100000, "tax": 0, "total": 100000 }
+        ]
+      }
+    }
+  ]
+}

@@ -165,11 +165,26 @@ func Allocate(total IDR, weights []int64) ([]IDR, error) {
 	remainders := make([]int64, len(weights))
 	var handedOut int64
 
+	// The product goes through decimal rather than int64.
+	//
+	// total x weight overflows a signed 64-bit integer well inside the range
+	// this system trades in: a single invoice near the Rp 4,8 miliar PKP
+	// threshold, allocated against a weight of the same size, is about 2,4e19
+	// against a ceiling of 9,2e18. The overflow wraps negative, every remainder
+	// comes out below the sentinel the loop below starts from, and the
+	// allocation panics rather than returning a wrong figure — which is the
+	// better of the two failures, but neither belongs in a till.
+	//
+	// QuoRem gives the exact integer quotient and the exact remainder, so the
+	// arithmetic is what it always was and only its range has changed.
+	magD, sumD := decimal.NewFromInt(mag), decimal.NewFromInt(sumW)
 	for i, w := range weights {
-		share := mag * w / sumW
-		parts[i] = IDR(sign * share)
-		remainders[i] = mag*w - share*sumW // the fractional part, scaled by sumW
-		handedOut += share
+		share, rem := magD.Mul(decimal.NewFromInt(w)).QuoRem(sumD, 0)
+		parts[i] = IDR(sign * share.IntPart())
+		// The fractional part, scaled by sumW. Strictly below sumW, so it fits
+		// even when the product it came from did not.
+		remainders[i] = rem.IntPart()
+		handedOut += share.IntPart()
 	}
 
 	// Distribute what truncation dropped, largest remainder first.

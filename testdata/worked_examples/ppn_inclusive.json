@@ -1,0 +1,111 @@
+{
+  "about": "PPN inside a tax-inclusive shelf price: dpp = round(price / (1 + rate)), then tax = price - dpp (SPEC 2.2). TASKS 5.6.",
+  "verification": "Arithmetic verified by hand. Still to confirm with the owner and their konsultan pajak: whether this business's shelf prices are quoted inclusive of PPN at all. Indonesian retail usually is; a distributor selling to clinics on an invoice usually is not. The engine does both and the rule row decides, so this is a configuration answer, not a code change.",
+  "rules": {
+    "ppn-inclusive": {
+      "id": "rule-inclusive",
+      "entity_id": "entity-pkp",
+      "type": "PPN",
+      "rate_bp": 1200,
+      "dpp_num": 11,
+      "dpp_den": 12,
+      "inclusive": true,
+      "level": "LINE",
+      "rounding": "HALF_UP",
+      "rounding_unit": 1,
+      "valid_from": "2025-01-01",
+      "valid_to": "",
+      "legal_ref": "PMK 131/2024"
+    }
+  },
+  "cases": [
+    {
+      "name": "the same money seen from the other side",
+      "why": "The mirror of the exclusive round-million case. A shelf price of Rp 1.110.000 divides back to exactly Rp 1.000.000 of DPP and Rp 110.000 of PPN, with no remainder. The two directions agreeing on a figure that divides cleanly is the sanity check on the formula itself.",
+      "rule": "ppn-inclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [{ "ref": "L1", "amount": 1110000 }],
+      "expect": {
+        "dpp": 1000000,
+        "tax": 110000,
+        "grand_total": 1110000,
+        "accrued_without_faktur": false,
+        "lines": [{ "ref": "L1", "dpp": 1000000, "tax": 110000, "total": 1110000 }]
+      }
+    },
+    {
+      "name": "a five thousand rupiah item: subtracting and recomputing disagree",
+      "why": "This is the case SPEC 2.2 was written for, and the cheapest thing on the shelf is where it bites. Rp 5.000 / 1,11 is Rp 4.504,50450..., which rounds to a DPP of Rp 4.505. Subtracting gives PPN of Rp 495 and the parts come to Rp 5.000, the price on the label. Recomputing the tax independently -- Rp 4.505 x 11/100 = Rp 495,55 -- gives Rp 496, and the receipt then adds up to Rp 5.001 for an item marked Rp 5.000. One rupiah, on every such line, in front of the customer. Subtract.",
+      "rule": "ppn-inclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": false,
+      "lines": [{ "ref": "L1", "amount": 5000 }],
+      "expect": {
+        "dpp": 4505,
+        "tax": 495,
+        "grand_total": 5000,
+        "accrued_without_faktur": true,
+        "lines": [{ "ref": "L1", "dpp": 4505, "tax": 495, "total": 5000 }]
+      }
+    },
+    {
+      "name": "a sixty-six thousand rupiah item, where recomputing loses a rupiah the other way",
+      "why": "Rp 66.000 / 1,11 is Rp 59.459,459..., a DPP of Rp 59.459 and, by subtraction, PPN of Rp 6.541. Recomputing gives Rp 6.540,49 -> Rp 6.540, and the parts come to Rp 65.999. Included alongside the Rp 5.000 case because the independent recomputation errs in both directions, so a system with that bug cannot be spotted by the sign of the discrepancy.",
+      "rule": "ppn-inclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [{ "ref": "L1", "amount": 66000 }],
+      "expect": {
+        "dpp": 59459,
+        "tax": 6541,
+        "grand_total": 66000,
+        "accrued_without_faktur": false,
+        "lines": [{ "ref": "L1", "dpp": 59459, "tax": 6541, "total": 66000 }]
+      }
+    },
+    {
+      "name": "a hundred thousand rupiah, repeating decimal",
+      "why": "Rp 100.000 / 1,11 is Rp 90.090,0900..., a DPP of Rp 90.090 and PPN of Rp 9.910. The DPP nilai lain of 11/12 is why this repeats and why the fraction is carried whole: 0,916666 written out to any number of places is a different number from 11/12, and it is a number no regulation contains (SPEC 2.1).",
+      "rule": "ppn-inclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [{ "ref": "L1", "amount": 100000 }],
+      "expect": {
+        "dpp": 90090,
+        "tax": 9910,
+        "grand_total": 100000,
+        "accrued_without_faktur": false,
+        "lines": [{ "ref": "L1", "dpp": 90090, "tax": 9910, "total": 100000 }]
+      }
+    },
+    {
+      "name": "a three line basket at shelf prices",
+      "why": "The property that matters at the till: the customer pays the sum of the labels, Rp 83.500, and the breakdown printed underneath adds back up to it. Rp 75.225 of DPP and Rp 8.275 of PPN.",
+      "rule": "ppn-inclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": false,
+      "lines": [
+        { "ref": "L1", "amount": 5000 },
+        { "ref": "L2", "amount": 66000 },
+        { "ref": "L3", "amount": 12500 }
+      ],
+      "expect": {
+        "dpp": 75225,
+        "tax": 8275,
+        "grand_total": 83500,
+        "accrued_without_faktur": true,
+        "lines": [
+          { "ref": "L1", "dpp": 4505, "tax": 495, "total": 5000 },
+          { "ref": "L2", "dpp": 59459, "tax": 6541, "total": 66000 },
+          { "ref": "L3", "dpp": 11261, "tax": 1239, "total": 12500 }
+        ]
+      }
+    }
+  ]
+}

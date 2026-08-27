@@ -1,0 +1,134 @@
+{
+  "about": "PKP status decides the behaviour and is enforced, not conventional (SPEC 2.3). TASKS 5.4, 5.5, 5.6.",
+  "verification": "Behavioural, not arithmetic: these cases assert what the engine refuses to do. The two facts that matter -- that a PKP owes output PPN with or without a faktur, and that a non-PKP entity charges nothing and issues nothing -- come from SPEC 2.3 and should be confirmed with the konsultan pajak in the same sitting as the rate.",
+  "rules": {
+    "ppn-inclusive": {
+      "id": "rule-inclusive",
+      "entity_id": "entity-pkp",
+      "type": "PPN",
+      "rate_bp": 1200, "dpp_num": 11, "dpp_den": 12,
+      "inclusive": true, "level": "LINE",
+      "rounding": "HALF_UP", "rounding_unit": 1,
+      "valid_from": "2025-01-01", "valid_to": "", "legal_ref": "PMK 131/2024"
+    },
+    "ppn-not-yet-in-force": {
+      "id": "rule-staged",
+      "entity_id": "entity-nonpkp",
+      "type": "PPN",
+      "rate_bp": 1200, "dpp_num": 11, "dpp_den": 12,
+      "inclusive": true, "level": "LINE",
+      "rounding": "HALF_UP", "rounding_unit": 1,
+      "valid_from": "2027-01-01", "valid_to": "", "legal_ref": "PMK 131/2024"
+    },
+    "ppn-already-in-force-at-a-non-pkp-entity": {
+      "id": "rule-contradiction",
+      "entity_id": "entity-nonpkp",
+      "type": "PPN",
+      "rate_bp": 1200, "dpp_num": 11, "dpp_den": 12,
+      "inclusive": true, "level": "LINE",
+      "rounding": "HALF_UP", "rounding_unit": 1,
+      "valid_from": "2026-01-01", "valid_to": "", "legal_ref": "PMK 131/2024"
+    }
+  },
+  "cases": [
+    {
+      "name": "a PKP sale with a faktur issued",
+      "why": "The control. Paired with the next case, which is the same basket with no faktur.",
+      "rule": "ppn-inclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [{ "ref": "L1", "amount": 555000 }],
+      "expect": {
+        "dpp": 500000, "tax": 55000, "grand_total": 555000,
+        "accrued_without_faktur": false,
+        "lines": [{ "ref": "L1", "dpp": 500000, "tax": 55000, "total": 555000 }]
+      }
+    },
+    {
+      "name": "a PKP walk-in sale with no faktur owes exactly the same PPN",
+      "why": "TASKS 5.4, and the most expensive thing in this file. The liability attaches to the delivery of taxable goods, not to the paperwork, so Rp 55.000 is owed on this sale whether or not the buyer ever asks for a document. Nobody is chasing it and no counter-party will reconcile against it, so if the engine charged nothing here the shortfall would be found at the masa pajak filing and paid out of margin. The figures are identical to the case above by construction: faktur_issued reaches none of the arithmetic.",
+      "rule": "ppn-inclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": false,
+      "lines": [{ "ref": "L1", "amount": 555000 }],
+      "expect": {
+        "dpp": 500000, "tax": 55000, "grand_total": 555000,
+        "accrued_without_faktur": true,
+        "lines": [{ "ref": "L1", "dpp": 500000, "tax": 55000, "total": 555000 }]
+      }
+    },
+    {
+      "name": "the non-PKP entity charges nothing",
+      "why": "TASKS 5.5. No rule set at all, which is what a non-PKP entity has. The whole amount is the DPP and no PPN is levied -- not because a rate of zero was applied, but because no rate was consulted.",
+      "seller": { "entity_id": "entity-nonpkp", "is_pkp": false },
+      "business_date": "2026-08-21",
+      "faktur_issued": false,
+      "lines": [
+        { "ref": "L1", "amount": 555000 },
+        { "ref": "L2", "amount": 5000 }
+      ],
+      "expect": {
+        "dpp": 560000, "tax": 0, "grand_total": 560000,
+        "accrued_without_faktur": false,
+        "lines": [
+          { "ref": "L1", "dpp": 555000, "tax": 0, "total": 555000 },
+          { "ref": "L2", "dpp": 5000, "tax": 0, "total": 5000 }
+        ]
+      }
+    },
+    {
+      "name": "the non-PKP entity may hold a rule staged for a future registration",
+      "why": "After crossing the threshold, registration is due by the end of the book year and the VAT obligation starts in the first tax period of the following one (PMK 164/2023 Pasal 17(3) and Pasal 18). Staging the rule with that valid_from is the correct thing to do, and it must not break selling in the meantime. The rule exists, it is simply not in force on this date.",
+      "rule": "ppn-not-yet-in-force",
+      "seller": { "entity_id": "entity-nonpkp", "is_pkp": false },
+      "business_date": "2026-08-21",
+      "faktur_issued": false,
+      "lines": [{ "ref": "L1", "amount": 555000 }],
+      "expect": {
+        "dpp": 555000, "tax": 0, "grand_total": 555000,
+        "accrued_without_faktur": false,
+        "lines": [{ "ref": "L1", "dpp": 555000, "tax": 0, "total": 555000 }]
+      }
+    },
+    {
+      "name": "the non-PKP entity cannot issue a faktur",
+      "why": "TASKS 5.5. A faktur pajak can only be issued by a Pengusaha Kena Pajak. Refused rather than recorded-and-ignored, because a faktur number written on a document the buyer takes away is a claim someone else will try to credit.",
+      "seller": { "entity_id": "entity-nonpkp", "is_pkp": false },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [{ "ref": "L1", "amount": 555000 }],
+      "expect_error": "ErrNonPKPFaktur"
+    },
+    {
+      "name": "a rule already in force at an entity marked non-PKP is a contradiction",
+      "why": "Either the entity registered and nobody flipped is_pkp -- in which case it has been under-charging since the rule's valid_from and the debt is accruing -- or the rule was staged for a registration that did not happen and its date has now passed. Both need a person. Pricing the sale at zero would be picking one of them silently, and it is the expensive one.",
+      "rule": "ppn-already-in-force-at-a-non-pkp-entity",
+      "seller": { "entity_id": "entity-nonpkp", "is_pkp": false },
+      "business_date": "2026-08-21",
+      "faktur_issued": false,
+      "lines": [{ "ref": "L1", "amount": 555000 }],
+      "expect_error": "ErrNonPKPCharge"
+    },
+    {
+      "name": "a PKP entity with no rule in force is refused",
+      "why": "The mirror of the case above and the same reasoning as TASKS 5.4. A PKP owes output PPN on the delivery whether or not anything was charged, so an empty rule set cannot be treated as a rate of zero. The till stops and says which date has no rule; the alternative is 11% of turnover disappearing quietly.",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": false,
+      "lines": [{ "ref": "L1", "amount": 555000 }],
+      "expect_error": "ErrNoEffectiveRule"
+    },
+    {
+      "name": "one company's cart cannot be priced with the other company's rules",
+      "why": "There are two entities here and one of them legally cannot charge PPN. Crossing the rules between them is not a near miss.",
+      "rule": "ppn-inclusive",
+      "seller": { "entity_id": "entity-nonpkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": false,
+      "lines": [{ "ref": "L1", "amount": 555000 }],
+      "expect_error": "ErrEntityMismatch"
+    }
+  ]
+}

@@ -30,5 +30,12 @@
 //
 // Where a legal rule is encoded, cite the regulation in a comment.
 //
-// TASKS 5.3–5.7.
+// # The PPN position
+//
+// Per masa pajak — one calendar month in the entity's timezone — output PPN
+// less creditable input PPN (SPEC §2.4). The filter on the input side is the
+// whole point of tracking purchases: only a faktur makes input PPN creditable,
+// and without one the rupiah went into the cost of the goods instead.
+//
+// TASKS 5.3–5.7 and 5.9.
 package tax

@@ -426,3 +426,98 @@ func TestAllocateNeverLosesRupiah(t *testing.T) {
 		}
 	}
 }
+
+// TestAllocateSurvivesThresholdScaleFigures is a regression, found by a sale
+// sized at the PKP threshold.
+//
+// Allocate multiplied the total by each weight in int64. At Rp 4,8 miliar
+// against a weight of the same size that product is about 2,4e19, against an
+// int64 ceiling of 9,2e18 — it wrapped negative, every remainder came out below
+// the sentinel the distribution loop starts from, and the call panicked.
+//
+// That is not an exotic figure in this system: it is the threshold the whole
+// omzet clock is built around, and an invoice discount or an invoice-level PPN
+// on a sale of that size goes straight through here.
+func TestAllocateSurvivesThresholdScaleFigures(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		total   money.IDR
+		weights []int64
+	}{
+		{
+			// One line at the threshold itself.
+			name:  "a single line at the PKP threshold",
+			total: 4_324_324_324, weights: []int64{4_800_000_000},
+		},
+		{
+			name:  "two lines either side of it",
+			total: 8_648_648_648, weights: []int64{4_800_000_000, 4_800_000_000},
+		},
+		{
+			// Deliberately awkward: the shares do not divide evenly, so the
+			// remainder loop has real work to do at a scale that used to
+			// overflow.
+			name:  "three uneven lines at scale",
+			total: 4_324_324_324, weights: []int64{1_600_000_001, 1_600_000_001, 1_599_999_998},
+		},
+		{
+			name:  "a refund of the same size",
+			total: -4_324_324_324, weights: []int64{4_800_000_000, 1},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := money.Allocate(tt.total, tt.weights)
+			if err != nil {
+				t.Fatalf("Allocate: %v", err)
+			}
+			if len(got) != len(tt.weights) {
+				t.Fatalf("got %d parts, want %d", len(got), len(tt.weights))
+			}
+
+			// The property the whole function exists for: the parts sum to the
+			// whole, exactly, with nothing lost and nothing invented.
+			var sum money.IDR
+			for _, p := range got {
+				sum = sum.Add(p)
+			}
+			if sum != tt.total {
+				t.Errorf("parts sum to %s, want %s", sum, tt.total)
+			}
+
+			// And each part keeps the sign of the total, so a refund does not
+			// come back with a positive slice in it.
+			for i, p := range got {
+				if tt.total.IsPositive() && p.IsNegative() {
+					t.Errorf("part %d is %s against a positive total", i, p)
+				}
+				if tt.total.IsNegative() && p.IsPositive() {
+					t.Errorf("part %d is %s against a negative total", i, p)
+				}
+			}
+		})
+	}
+}
+
+// TestAllocateIsProportionalAtScale: the fix must not have changed the answer,
+// only its range.
+func TestAllocateIsProportionalAtScale(t *testing.T) {
+	t.Parallel()
+
+	// Rp 4.800.000.000 split three ways in the ratio 1:1:2.
+	got, err := money.Allocate(4_800_000_000, []int64{1_000_000_000, 1_000_000_000, 2_000_000_000})
+	if err != nil {
+		t.Fatalf("Allocate: %v", err)
+	}
+	want := []money.IDR{1_200_000_000, 1_200_000_000, 2_400_000_000}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("part %d = %s, want %s", i, got[i], want[i])
+		}
+	}
+}

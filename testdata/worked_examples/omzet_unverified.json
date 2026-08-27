@@ -1,0 +1,26 @@
+{
+  "about": "Open questions about the Rp 4,8 miliar PKP threshold. TASKS 7.9, SPEC 5.2.",
+  "verification": "No figures are asserted here. Each question below changes a date the owner would plan a year around, and every one of them is answered by a config row rather than a code change -- both readings are implemented and tested. Take this list to the konsultan pajak alongside the PPN questions in ppn_unverified.json.",
+  "questions": [
+    {
+      "name": "TODO which regulation sets the PKP registration deadline",
+      "affects": "register_by and vat_starts on the omzet clock",
+      "todo": "This is the load-bearing one, and the two readings are months apart on the same facts. SPEC 5.2 says registration is due by the end of the current book year and the PPN obligation starts in the first tax period of the following one, citing PMK 164/2023 Pasal 17(3) and Pasal 18. But PMK 164/2023 governs the 0,5% final PPh regime for small business, where exceeding Rp 4,8 miliar moves a taxpayer to ordinary rates from the following tax year -- that is a PPh rule, not a PPN one. The rule usually quoted for PKP confirmation itself is PMK 197/2013 Pasal 4, which gives until the end of the month AFTER the month the threshold was passed. On a crossing dated 14 July 2026 the first reading gives 31 December 2026 and 1 January 2027; the second gives 31 August 2026 and 1 September 2026. They may both be right about different obligations, which would mean the screen should show two deadlines rather than one pair. WHAT TO ASK: for a non-PKP business that passes Rp 4,8 miliar mid-year, by when must it be confirmed as PKP, and from which date must it start charging PPN? IF IT IS THE SHORTER RULE: change register_by_policy to END_OF_FOLLOWING_MONTH and vat_starts_policy to MONTH_AFTER_REGISTRATION on the omzet_threshold row. Both are implemented and tested; nothing else moves."
+    },
+    {
+      "name": "TODO is peredaran bruto measured gross or net of PPN",
+      "affects": "every figure on the omzet clock at the PKP entity",
+      "todo": "SPEC 5.4 says default net of VAT for the PKP entity, configurable, and that is what is seeded. The word bruto argues the other way. It matters little for the non-PKP entity, which charges no PPN and is the only one that can still cross -- but it changes the PKP entity's figure by about 10% and that entity is tracked too. WHAT TO ASK: when measuring peredaran bruto against Rp 4,8 miliar, is turnover counted before or after PPN? IF GROSS: change base to GROSS on the omzet_setting row for that entity."
+    },
+    {
+      "name": "TODO do returns and discounts reduce peredaran bruto",
+      "affects": "the cumulative, and therefore whether and when a year crosses",
+      "todo": "The ledger records a sales return as a negative row on the day the goods came back, so returns reduce the cumulative. That matches ordinary practice -- peredaran bruto is generally understood as net of returns and discounts -- but I have not confirmed it against a regulation, and it is not a small effect for a business whose customers send goods back. A void is treated separately and is not in doubt: a sale that did not happen was never turnover, so the reversal carries the original sale's date and removes it from where it was counted (SPEC 5.4). WHAT TO ASK: are sales returns deducted from peredaran bruto for the Rp 4,8 miliar test, and if so on which date -- the sale's or the return's? IF THEY ARE NOT DEDUCTED: the RETURN and REFUND event types stop being written to the ledger; the sale rows already carry the full turnover."
+    },
+    {
+      "name": "TODO is the threshold still Rp 4,8 miliar",
+      "affects": "the whole clock",
+      "todo": "Rp 4,8 miliar has been the figure since PMK 197/2013 and it is what is seeded, with that citation on the row. It is effective-dated config precisely because a threshold is the kind of number that moves -- and unlike a tax rate, a change to it does not alter any historical transaction, it changes which year a business crossed in. WHAT TO ASK: confirm the current figure and the regulation. IF IT HAS CHANGED: close the seeded row's valid_to and insert a new one; domain/omzet has no fallback threshold and refuses to measure against a figure nobody configured (INV-4)."
+    }
+  ]
+}

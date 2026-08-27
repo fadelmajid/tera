@@ -1,0 +1,159 @@
+{
+  "about": "Cases whose expected rupiah figure is NOT KNOWN. TASKS 5.6 says leave a TODO with the reasoning rather than inventing a number somebody might trust, so that is what these are.",
+  "verification": "Every case here carries a todo and no expected figures. The test suite runs each one, prints what the engine currently produces, and reports the count -- so the numbers below are the engine's opinion, not an answer. Take this list to the konsultan pajak with the DJP sources; each answer either confirms the current configuration or becomes a tax_rule row, and none of them is a code change.",
+  "rules": {
+    "ppn-inclusive": {
+      "id": "rule-inclusive",
+      "entity_id": "entity-pkp",
+      "type": "PPN",
+      "rate_bp": 1200,
+      "dpp_num": 11,
+      "dpp_den": 12,
+      "inclusive": true,
+      "level": "LINE",
+      "rounding": "HALF_UP",
+      "rounding_unit": 1,
+      "valid_from": "2025-01-01",
+      "valid_to": "",
+      "legal_ref": "PMK 131/2024"
+    },
+    "ppn-inclusive-invoice": {
+      "id": "rule-inclusive-invoice",
+      "entity_id": "entity-pkp",
+      "type": "PPN",
+      "rate_bp": 1200,
+      "dpp_num": 11,
+      "dpp_den": 12,
+      "inclusive": true,
+      "level": "INVOICE",
+      "rounding": "HALF_UP",
+      "rounding_unit": 1,
+      "valid_from": "2025-01-01",
+      "valid_to": "",
+      "legal_ref": "PMK 131/2024"
+    },
+    "ppn-full-dpp": {
+      "id": "rule-full-dpp",
+      "entity_id": "entity-pkp",
+      "type": "PPN",
+      "rate_bp": 1200,
+      "dpp_num": 1,
+      "dpp_den": 1,
+      "inclusive": true,
+      "level": "LINE",
+      "rounding": "HALF_UP",
+      "rounding_unit": 1,
+      "valid_from": "2025-01-01",
+      "valid_to": "",
+      "legal_ref": "UU 7/2021 (HPP) Pasal 7"
+    }
+  },
+  "cases": [
+    {
+      "name": "TODO which alat kesehatan are exempt from PPN, if any",
+      "todo": "No product in this system carries an exemption flag, so this cart marks a line exempt by hand to show the engine handles it. Indonesian VAT law does exempt certain health-related goods and services, and I do not know the current list, whether it reaches medical devices as opposed to medicines and vaccines, or whether this catalogue contains anything on it. Inventing a list would be worse than having none: an item wrongly exempted is uncollected output PPN the business still owes, and an item wrongly taxed is an overcharge to a clinic that will notice. WHAT TO ASK: which SKUs in the catalogue, if any, are dibebaskan or tidak dipungut, and under which regulation. IF THE ANSWER IS 'SOME': the exemption becomes a product-level flag with its own legal_ref, feeding Line.Exempt, which already works -- this file's mixed-cart cases prove it. IF THE ANSWER IS 'NONE': delete this case and the flag stays unused.",
+      "rule": "ppn-inclusive",
+      "seller": {
+        "entity_id": "entity-pkp",
+        "is_pkp": true
+      },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [
+        {
+          "ref": "L1",
+          "amount": 450000
+        },
+        {
+          "ref": "L2",
+          "amount": 275000,
+          "exempt": true
+        }
+      ]
+    },
+    {
+      "name": "TODO does a faktur pajak round PPN on each line or once on the invoice",
+      "todo": "SPEC 2.1 makes calculation_level configurable and both are implemented, but I do not know which one DJP expects on a faktur pajak, and the two answers differ by a rupiah or two on a multi-line invoice -- enough for a buyer's bookkeeper to query it and, on a credited input, enough to mismatch against the seller's reported output. The seeded default is INVOICE on the reasoning that the faktur states one DPP and one PPN and those are what get reported, so the line detail should be carved out of them rather than summed into a different total. That reasoning is mine and it is not a source. WHAT TO ASK: for an invoice with several lines, does the reported PPN equal the sum of the per-line rounded PPN, or the tax on the summed DPP? IF THE ANSWER IS 'LINE': change calculation_level on the seeded rule; nothing else moves.",
+      "rule": "ppn-inclusive-invoice",
+      "seller": {
+        "entity_id": "entity-pkp",
+        "is_pkp": true
+      },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [
+        {
+          "ref": "L1",
+          "amount": 3333
+        },
+        {
+          "ref": "L2",
+          "amount": 3333
+        },
+        {
+          "ref": "L3",
+          "amount": 3334
+        }
+      ]
+    },
+    {
+      "name": "TODO is PPN rounded half-up to whole rupiah, or down",
+      "todo": "Rupiah has no circulating subunit so something must be dropped, and HALF_UP is the seeded choice because it is unbiased across many transactions. I have seen it asserted that DJP expects PPN truncated to whole rupiah instead, and I have not confirmed that against a regulation. On a single line it is worth under a rupiah; across a masa pajak of a thousand lines a systematic half-rupiah bias is a few hundred rupiah of difference between what the system says is owed and what a reconciliation says. Small, but it is the kind of small that costs an afternoon to explain. WHAT TO ASK: is the rounding mode for PPN prescribed anywhere, and to what unit? IF THE ANSWER IS 'TRUNCATE': rounding_mode is a column and this is a new tax_rule row plus a rounding mode implemented in domain/tax, which today deliberately refuses any mode it cannot honour rather than silently approximating one.",
+      "rule": "ppn-inclusive",
+      "seller": {
+        "entity_id": "entity-pkp",
+        "is_pkp": true
+      },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [
+        {
+          "ref": "L1",
+          "amount": 5000
+        },
+        {
+          "ref": "L2",
+          "amount": 15000
+        },
+        {
+          "ref": "L3",
+          "amount": 25000
+        }
+      ]
+    },
+    {
+      "name": "TODO does the 11/12 DPP nilai lain still apply on the day of sale",
+      "todo": "This is the load-bearing one. PMK 131/2024 holds the effective rate at 11% by applying the statutory 12% to a DPP of 11/12 of the price, which is why the fraction exists at all rather than a plain rate. Indonesian VAT moved three times in eighteen months and this arrangement was described as transitional when it was introduced. I cannot verify from here what is in force in August 2026. This case prices the same basket at a DPP factor of 1/1 -- statutory 12% on the full price -- so the difference is visible: if the nilai lain has lapsed, every figure in the other fixture files is understated. WHAT TO ASK: is the 11/12 DPP nilai lain still in force, and if it has ended, on what date? IF IT HAS ENDED: insert a new tax_rule row with dpp 1/1 and valid_from set to the day it changed, and close the old row's valid_to on the day before. Settled sales carry their own snapshot and will not move (INV-3).",
+      "rule": "ppn-full-dpp",
+      "seller": {
+        "entity_id": "entity-pkp",
+        "is_pkp": true
+      },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [
+        {
+          "ref": "L1",
+          "amount": 1110000
+        }
+      ]
+    },
+    {
+      "name": "TODO PPnBM is deliberately not seeded",
+      "todo": "SPEC 2.1 lists a PPnBM row among the seeded defaults at 12% on a full DPP. It is deliberately NOT seeded (DECISIONS D-017), and this case records why. Nothing in an alat kesehatan catalogue is a luxury good, so no line would ever be levied under it -- but the row would sit on the tax settings screen with a rate and a citation beside it, and a figure presented that way is a figure somebody will believe. I could not verify which PPnBM tariff band applies to what, whether PPnBM shares PPN's DPP or stacks on top of it, or whether the nilai lain reaches it. TASKS 5.6 says not to invent a figure someone might trust, and a rate on an admin screen is exactly that. WHAT TO ASK: nothing, unless the catalogue ever gains a luxury item -- at which point this becomes a real question and none of the above should be assumed. IF IT EVER DOES: domain/tax already models the type, so a verified rate is a tax_rule row rather than a code change. The lines below are priced under the ordinary PPN rule, to show what is NOT happening to them.",
+      "rule": "ppn-inclusive",
+      "seller": {
+        "entity_id": "entity-pkp",
+        "is_pkp": true
+      },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [
+        {
+          "ref": "L1",
+          "amount": 1110000
+        }
+      ]
+    }
+  ]
+}

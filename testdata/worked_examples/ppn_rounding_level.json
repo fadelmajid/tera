@@ -1,0 +1,132 @@
+{
+  "about": "Where the rounding happens: on each line, or once on the invoice (SPEC 2.1 calculation_level). TASKS 5.6.",
+  "verification": "Arithmetic verified by hand. WHICH LEVEL IS CORRECT FOR A FAKTUR PAJAK IS NOT SETTLED HERE -- see ppn_unverified.json. Both are implemented and the rule row decides, so the answer is a configuration change.",
+  "rules": {
+    "level-line-inclusive": {
+      "id": "rule-line-inclusive",
+      "entity_id": "entity-pkp",
+      "type": "PPN",
+      "rate_bp": 1200, "dpp_num": 11, "dpp_den": 12,
+      "inclusive": true, "level": "LINE",
+      "rounding": "HALF_UP", "rounding_unit": 1,
+      "valid_from": "2025-01-01", "valid_to": "", "legal_ref": "PMK 131/2024"
+    },
+    "level-invoice-inclusive": {
+      "id": "rule-invoice-inclusive",
+      "entity_id": "entity-pkp",
+      "type": "PPN",
+      "rate_bp": 1200, "dpp_num": 11, "dpp_den": 12,
+      "inclusive": true, "level": "INVOICE",
+      "rounding": "HALF_UP", "rounding_unit": 1,
+      "valid_from": "2025-01-01", "valid_to": "", "legal_ref": "PMK 131/2024"
+    },
+    "level-line-exclusive": {
+      "id": "rule-line-exclusive",
+      "entity_id": "entity-pkp",
+      "type": "PPN",
+      "rate_bp": 1200, "dpp_num": 11, "dpp_den": 12,
+      "inclusive": false, "level": "LINE",
+      "rounding": "HALF_UP", "rounding_unit": 1,
+      "valid_from": "2025-01-01", "valid_to": "", "legal_ref": "PMK 131/2024"
+    },
+    "level-invoice-exclusive": {
+      "id": "rule-invoice-exclusive",
+      "entity_id": "entity-pkp",
+      "type": "PPN",
+      "rate_bp": 1200, "dpp_num": 11, "dpp_den": 12,
+      "inclusive": false, "level": "INVOICE",
+      "rounding": "HALF_UP", "rounding_unit": 1,
+      "valid_from": "2025-01-01", "valid_to": "", "legal_ref": "PMK 131/2024"
+    }
+  },
+  "cases": [
+    {
+      "name": "three near-equal lines rounded on each line, inclusive",
+      "why": "Rp 3.333 / 1,11 is Rp 3.002,70 twice and Rp 3.004,50 once, giving a DPP of Rp 3.003 + Rp 3.003 + Rp 3.004 = Rp 9.010. Paired with the invoice-level case below, which lands on Rp 9.009 for the same basket. One rupiah apart, both internally consistent, and that is exactly why the level is a configured field rather than a decision buried in the code.",
+      "rule": "level-line-inclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [
+        { "ref": "L1", "amount": 3333 },
+        { "ref": "L2", "amount": 3333 },
+        { "ref": "L3", "amount": 3334 }
+      ],
+      "expect": {
+        "dpp": 9010, "tax": 990, "grand_total": 10000,
+        "accrued_without_faktur": false,
+        "lines": [
+          { "ref": "L1", "dpp": 3003, "tax": 330, "total": 3333 },
+          { "ref": "L2", "dpp": 3003, "tax": 330, "total": 3333 },
+          { "ref": "L3", "dpp": 3004, "tax": 330, "total": 3334 }
+        ]
+      }
+    },
+    {
+      "name": "the same three lines rounded once on the invoice, inclusive",
+      "why": "Rp 10.000 / 1,11 is Rp 9.009,0090..., so the invoice DPP is Rp 9.009 and the PPN is Rp 991 -- and those are the two figures that go on the faktur. The lines are then carved out of the invoice DPP by weight, not rounded on their own and hoped to agree: Rp 3.003 each, with the leftover rupiah of PPN landing on the largest line. The customer still pays Rp 10.000 either way.",
+      "rule": "level-invoice-inclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [
+        { "ref": "L1", "amount": 3333 },
+        { "ref": "L2", "amount": 3333 },
+        { "ref": "L3", "amount": 3334 }
+      ],
+      "expect": {
+        "dpp": 9009, "tax": 991, "grand_total": 10000,
+        "accrued_without_faktur": false,
+        "lines": [
+          { "ref": "L1", "dpp": 3003, "tax": 330, "total": 3333 },
+          { "ref": "L2", "dpp": 3003, "tax": 330, "total": 3333 },
+          { "ref": "L3", "dpp": 3003, "tax": 331, "total": 3334 }
+        ]
+      }
+    },
+    {
+      "name": "three near-equal lines rounded on each line, exclusive",
+      "why": "Rp 3.333 x 11/100 is Rp 366,63 -> Rp 367 on each of the first two lines and Rp 3.334 x 11/100 is Rp 366,74 -> Rp 367 on the third, so the invoice collects Rp 1.101 of PPN and the customer pays Rp 11.101.",
+      "rule": "level-line-exclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [
+        { "ref": "L1", "amount": 3333 },
+        { "ref": "L2", "amount": 3333 },
+        { "ref": "L3", "amount": 3334 }
+      ],
+      "expect": {
+        "dpp": 10000, "tax": 1101, "grand_total": 11101,
+        "accrued_without_faktur": false,
+        "lines": [
+          { "ref": "L1", "dpp": 3333, "tax": 367, "total": 3700 },
+          { "ref": "L2", "dpp": 3333, "tax": 367, "total": 3700 },
+          { "ref": "L3", "dpp": 3334, "tax": 367, "total": 3701 }
+        ]
+      }
+    },
+    {
+      "name": "the same three lines rounded once on the invoice, exclusive",
+      "why": "Rp 10.000 x 11/100 is exactly Rp 1.100, so the invoice collects Rp 1.100 and the customer pays Rp 11.100 -- a rupiah less than the line-level answer, because three separate roundings each went up. Under exclusive pricing the level changes what the customer is actually charged, not only how the receipt is broken down, which makes it the more consequential of the two settings.",
+      "rule": "level-invoice-exclusive",
+      "seller": { "entity_id": "entity-pkp", "is_pkp": true },
+      "business_date": "2026-08-21",
+      "faktur_issued": true,
+      "lines": [
+        { "ref": "L1", "amount": 3333 },
+        { "ref": "L2", "amount": 3333 },
+        { "ref": "L3", "amount": 3334 }
+      ],
+      "expect": {
+        "dpp": 10000, "tax": 1100, "grand_total": 11100,
+        "accrued_without_faktur": false,
+        "lines": [
+          { "ref": "L1", "dpp": 3333, "tax": 367, "total": 3700 },
+          { "ref": "L2", "dpp": 3333, "tax": 366, "total": 3699 },
+          { "ref": "L3", "dpp": 3334, "tax": 367, "total": 3701 }
+        ]
+      }
+    }
+  ]
+}
