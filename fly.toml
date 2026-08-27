@@ -1,0 +1,57 @@
+# Fly.io — a hosted test box for Tera.
+#
+# NOT the shop deployment. The shop runs on a machine on its own LAN with the
+# printer attached (ARCHITECTURE §1, INV-11). Read docs/HOSTING.md first; there
+# are two settings here that must not be changed and one gap this does not fix.
+
+app = "tera-coba"
+primary_region = "sin"          # Singapore — nearest to Jakarta
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  TERA_DB_PATH = "/data/tera.db"
+  TERA_ADDR = "0.0.0.0:8080"
+  TERA_BACKUP_DIR = "/data/cadangan"
+  # The container has one disk, so a snapshot beside the database is all that
+  # is available. It survives a bad migration and nothing else — pull real
+  # copies off the box with `fly ssh console -C "tera backup --to /data/x"` and
+  # `fly sftp get`.
+  TERA_BACKUP_ALLOW_SAME_DISK = "1"
+  # Fly terminates TLS in front of this, so the session cookie can and must be
+  # Secure. On the shop LAN it is deliberately off (D-008) because there is no
+  # certificate authority and a Secure cookie would never be sent, locking
+  # everyone out. Here the opposite is true.
+  TERA_COOKIE_SECURE = "1"
+
+# SQLite on a local file. One writer, one file, one machine.
+[[mounts]]
+  source = "tera_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+
+  # ---------------------------------------------------------------------
+  # Both of these are load-bearing. Changing either corrupts data.
+  #
+  # A second machine gets its OWN volume, which means a second database that
+  # believes it is the only one. Two tills, two sets of invoice numbers, two
+  # omzet counters, and no way to merge them afterwards. This app is
+  # deliberately single-instance: store.Open pins the pool to one connection
+  # because SQLite has one writer (ARCHITECTURE §1).
+  min_machines_running = 1
+  auto_stop_machines = false
+  auto_start_machines = true
+
+[[http_service.checks]]
+  path = "/readyz"
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

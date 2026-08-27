@@ -1,0 +1,54 @@
+# Tera on a VPS, behind Caddy for TLS.
+#
+# NOT the shop deployment. The shop runs on a machine on its own LAN with the
+# printer attached (ARCHITECTURE §1) — INV-11's whole point is that the till
+# keeps working when the internet does not, which a datacentre cannot offer.
+# This is a test box and a place to show people. Read docs/HOSTING.md.
+#
+#   docker compose up -d
+#   docker compose logs tera | grep "pengguna pertama"   # first-run password
+services:
+  tera:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      TERA_DB_PATH: /data/tera.db
+      TERA_ADDR: 0.0.0.0:8080
+      TERA_BACKUP_DIR: /data/cadangan
+      # One disk on a VPS, so a snapshot beside the database is all there is.
+      # It survives a bad migration and nothing else — the provider's own
+      # snapshots and `tera backup --to` pulled off the box are the real story
+      # (R14.2).
+      TERA_BACKUP_ALLOW_SAME_DISK: "1"
+      # Caddy terminates TLS in front of this, so the session cookie can and
+      # must be Secure. On the shop LAN it is deliberately off (D-008): there
+      # is no certificate authority there and a Secure cookie would never be
+      # sent, locking everyone out.
+      TERA_COOKIE_SECURE: "1"
+    volumes:
+      - tera-data:/data
+    # Deliberately not published to the host. Only Caddy reaches it, so the
+    # app is never available over plain HTTP on the VPS's public address —
+    # which it would be the moment somebody maps a port "just to test".
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - tera
+
+volumes:
+  tera-data:
+  caddy-data:
+  caddy-config:

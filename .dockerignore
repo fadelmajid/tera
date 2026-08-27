@@ -1,0 +1,21 @@
+# Build output — the image builds its own.
+bin/
+web/dist/
+web/node_modules/
+node_modules/
+
+# The business's data never belongs in an image layer.
+*.db
+*.db-wal
+*.db-shm
+backups/
+.tera-alamat.json
+
+.git/
+.github/
+*.tsbuildinfo
+coverage.out
+.env
+.env.*
+!.env.example
+.DS_Store

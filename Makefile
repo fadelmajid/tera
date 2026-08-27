@@ -27,7 +27,8 @@ GOOSE    ?= $(shell command -v goose 2>/dev/null || echo go run github.com/press
 
 .DEFAULT_GOAL := help
 .PHONY: help web build release run test test-race cover lint fmt vet tidy sqlc sqlc-vet \
-	    migrate-up migrate-down migrate-status migrate-create ci clean
+	    migrate-up migrate-down migrate-status migrate-create restore-drill \
+	    docker-build docker-run ci clean
 
 help: ## List available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -86,6 +87,20 @@ migrate-status: ## Show migration status
 migrate-create: ## New migration: make migrate-create name=create_stock_layer
 	@test -n "$(name)" || { echo "usage: make migrate-create name=create_stock_layer"; exit 1; }
 	$(GOOSE) -dir $(MIGRATIONS_DIR) -s create $(name) sql
+
+restore-drill: build ## Take a backup, restore it into a clean directory, and check it serves (TASKS 8.2)
+	./scripts/restore-drill.sh
+
+docker-build: ## Build the container image (test box only — see docs/HOSTING.md)
+	docker build --build-arg VERSION=$(VERSION) -t tera:$(VERSION) -t tera:latest .
+
+docker-run: docker-build ## Run the image locally on :8080 with a persistent volume
+	docker rm -f tera-test 2>/dev/null || true
+	docker run -d --name tera-test -p 8080:8080 -v tera-data:/data tera:latest
+	@echo "menunggu server siap..."
+	@until curl -sf http://127.0.0.1:8080/readyz >/dev/null 2>&1; do sleep 0.5; done
+	@docker logs tera-test 2>&1 | grep "pengguna pertama" || true
+	@echo "buka http://localhost:8080"
 
 ci: build vet lint test-race ## Everything CI runs
 

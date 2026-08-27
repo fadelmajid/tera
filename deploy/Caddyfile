@@ -1,0 +1,32 @@
+# TLS and a front door for the test box.
+#
+# Caddy gets a Let's Encrypt certificate automatically on first request, which
+# is the whole reason it is here: a VPS gives you a bare IP, and Tera's session
+# cookie must be Secure once it is on the open internet.
+
+# Replace with your own domain. Without one, use the VPS IP and Caddy will
+# serve a self-signed certificate — fine for a smoke test, and the browser will
+# warn.
+tera.example.com {
+	encode zstd gzip
+
+	# Tera has NO login rate limiting and no account lockout. That is
+	# deliberate — its threat model is a shop LAN where the attacker has to be
+	# in the building (D-008) — and it stops being true on a public URL.
+	#
+	# Uncomment to put HTTP basic auth in front of the whole app while testing.
+	# Generate the hash with:  docker run --rm caddy:2-alpine caddy hash-password
+	#
+	# basicauth {
+	# 	keluarga $2a$14$REPLACE_WITH_YOUR_OWN_HASH
+	# }
+
+	reverse_proxy tera:8080 {
+		# The app deliberately does not trust X-Forwarded-For (there is no
+		# proxy on the shop LAN, so trusting it would let any device forge the
+		# address in the audit log). Behind this proxy the recorded address is
+		# Caddy's, which is honest — it is the only peer Tera actually has.
+		health_uri /readyz
+		health_interval 30s
+	}
+}

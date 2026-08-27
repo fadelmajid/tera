@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -35,20 +36,59 @@ import (
 var version = "dev"
 
 func main() {
-	if err := run(); err != nil {
+	// dispatch owns the deferred signal teardown; main only decides the exit
+	// code, so os.Exit never skips it.
+	if err := dispatch(); err != nil {
 		slog.Error("tera berhenti", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
+func dispatch() error {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
-	logger.Info("tera", "version", version)
 
-	// A SIGINT or SIGTERM cancels this, which starts the graceful shutdown.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Subcommands, deliberately few. The backup and restore paths are the whole
+	// of R8.7's mitigation, and they have to be runnable by somebody who is not
+	// the developer on a laptop that is not the shop's — which means one binary,
+	// no arguments to remember, and no server running.
+	switch cmd, rest := subcommand(); cmd {
+	case "backup":
+		return runBackup(ctx, rest, logger)
+	case "restore":
+		return runRestore(ctx, rest, logger)
+	case "backups":
+		return runBackupList(ctx, rest, logger)
+	case "help", "-h", "--help":
+		usage(logger)
+		return nil
+	default:
+		return run(ctx, logger)
+	}
+}
+
+// subcommand splits argv into a verb and its flags. No verb means run the
+// server, which is what the shop machine does and what a double-click does.
+func subcommand() (cmd string, rest []string) {
+	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") {
+		return "", os.Args[1:]
+	}
+	return os.Args[1], os.Args[2:]
+}
+
+func usage(logger *slog.Logger) {
+	logger.Info("tera — sistem dagang dan persediaan", "version", version)
+	logger.Info("  tera                          jalankan server")
+	logger.Info("  tera backup --to DIR          ambil satu cadangan sekarang")
+	logger.Info("  tera backups --dir DIR        daftar cadangan yang ada")
+	logger.Info("  tera restore --from BERKAS    pulihkan cadangan ke basis data")
+}
+
+func run(ctx context.Context, logger *slog.Logger) error {
+	logger.Info("tera", "version", version)
 
 	dbPath := env("TERA_DB_PATH", "tera.db")
 	addr := env("TERA_ADDR", terahttp.DefaultAddr)
@@ -71,6 +111,10 @@ func run() error {
 		return err
 	}
 	logger.Info("database siap", "path", db.Path(), "schema_version", schema)
+
+	// R8.6: the address other devices reach this machine on may have moved
+	// while it was off, and nothing else in the building can tell.
+	warnIfAddressChanged(db.Path(), logger)
 
 	auth := service.NewAuth(db, time.Now)
 	if err := bootstrap(ctx, auth, logger); err != nil {
@@ -96,6 +140,12 @@ func run() error {
 	opname := service.NewOpname(db, aud, time.Now)
 	opening := service.NewOpening(db, aud, time.Now)
 	sales := service.NewSales(db, aud, time.Now)
+	marginReport := service.NewMargin(db, aud, time.Now)
+	transfers := service.NewTransfers(db, aud, time.Now)
+	taxes := service.NewTax(db, aud, time.Now)
+	exporter := service.NewExport(db, time.Now)
+	reports := service.NewReports(db, time.Now)
+	omzetClock := service.NewOmzet(db, aud, time.Now)
 
 	// The printer is attached to the server machine, which is where the cashier
 	// sits (ARCHITECTURE §1). Only the two facts that vary by model are
@@ -133,9 +183,29 @@ func run() error {
 		Opening:      opening,
 		Sales:        sales,
 		Printing:     printing,
+		Margin:       marginReport,
+		Transfers:    transfers,
+		Tax:          taxes,
+		Export:       exporter,
+		Reports:      reports,
+		Omzet:        omzetClock,
 		Logger:       logger,
 		CookieSecure: os.Getenv("TERA_COOKIE_SECURE") == "1",
 	})
+
+	// TASKS 8.1. Runs beside the server rather than as a cron job, because the
+	// deployment story is "copy one binary and run it" (ARCHITECTURE §1) — a
+	// backup that needs a second thing installed is a backup that will not
+	// exist on the shop machine.
+	backups := service.NewBackups(db, service.BackupConfig{
+		Dir:             os.Getenv("TERA_BACKUP_DIR"),
+		Interval:        time.Duration(envInt("TERA_BACKUP_INTERVAL_MINUTES", 60)) * time.Minute,
+		Keep:            envInt("TERA_BACKUP_KEEP", service.DefaultBackupKeep),
+		Version:         version,
+		Logger:          logger,
+		AllowSameDevice: os.Getenv("TERA_BACKUP_ALLOW_SAME_DISK") == "1",
+	})
+	go backups.Run(ctx)
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Start(ctx) }()
