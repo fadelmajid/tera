@@ -33,8 +33,15 @@ type Receipt struct {
 	Discount string
 	// PPN is empty for a non-PKP company, which cannot charge it at all
 	// (SPEC §2.3). Empty means the line is not printed, not that it is zero.
-	PPN   string
-	Total string
+	PPN string
+	// PPNInclusive changes the label from "PPN" to "Termasuk PPN".
+	//
+	// Under inclusive pricing the tax is already inside the total, and a line
+	// reading "PPN Rp 11.000" directly above "TOTAL Rp 111.000" reads as if it
+	// were added on top -- so the receipt appears not to add up, to the one
+	// person standing there with the money. One word fixes it.
+	PPNInclusive bool
+	Total        string
 
 	Payments []ReceiptPayment
 	Change   string

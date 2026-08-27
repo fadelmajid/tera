@@ -247,7 +247,11 @@ func (p *Printer) Render(r *Receipt) []byte {
 		twoCol(&b, w, "Diskon nota", "-"+r.Discount)
 	}
 	if r.PPN != "" {
-		twoCol(&b, w, "PPN", r.PPN)
+		label := "PPN"
+		if r.PPNInclusive {
+			label = "Termasuk PPN"
+		}
+		twoCol(&b, w, label, r.PPN)
 	}
 
 	b.Write(emphasisOn)

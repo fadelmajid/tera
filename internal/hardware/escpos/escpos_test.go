@@ -130,6 +130,35 @@ func TestPPNLineIsAbsentWhenThereIsNone(t *testing.T) {
 	}
 }
 
+// Under inclusive pricing the tax is already inside the total, and the receipt
+// has to say so.
+//
+// "PPN Rp 6.400" printed directly above "TOTAL Rp 64.000" reads as if it were
+// added on top, so the receipt appears not to add up -- to the one person
+// standing there with the money, at the moment they are handing it over. The
+// arithmetic is right either way; the label is what makes it legible.
+func TestAnInclusivePPNLineSaysSo(t *testing.T) {
+	t.Parallel()
+
+	p := escpos.NewWriter(escpos.Config{Width: 32}, &bytes.Buffer{})
+
+	r := sample()
+	r.PPN, r.PPNInclusive = "Rp 6.400", true
+	body := strings.Join(text(p.Render(r)), "\n")
+	if !strings.Contains(body, "Termasuk PPN") {
+		t.Errorf("an inclusive receipt does not say the PPN is included:\n%s", body)
+	}
+
+	r.PPNInclusive = false
+	body = strings.Join(text(p.Render(r)), "\n")
+	if strings.Contains(body, "Termasuk PPN") {
+		t.Errorf("an exclusive receipt claims the PPN was already included:\n%s", body)
+	}
+	if !strings.Contains(body, "PPN") {
+		t.Errorf("an exclusive receipt lost its PPN line:\n%s", body)
+	}
+}
+
 // Product names are user input. A stray escape byte in a name would otherwise
 // reconfigure the printer mid-receipt -- double-height for the rest of the day,
 // or worse, a cut in the middle of the items.
