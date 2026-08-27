@@ -1,4 +1,5 @@
 import { NavLink, Route, Routes, Navigate } from 'react-router-dom'
+import { Merek } from './Merek'
 import type { Session } from '../api/auth'
 import { canManageMasterData, canSeeOwnerMargin, canEnterPurchases } from '../api/auth'
 import type { Entity } from '../api/masterdata'
@@ -46,7 +47,10 @@ export function Kerangka({
   return (
     <div className="app">
       <aside className="sidebar">
-        <h1>Tera</h1>
+        <div className="merek">
+          <Merek size={28} />
+          <h1>Tera</h1>
+        </div>
         <p className="entity">
           {session.user.full_name} · {role ?? 'tanpa peran'}
         </p>

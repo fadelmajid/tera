@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
+    <!-- The mark is an SVG so one file covers every size the browser asks for;
+         the PNG is only for an iOS home screen, which will not take the SVG.
+         Both are served from the binary like the rest of the client. -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#1a7a4a" />
+    <meta name="description" content="Tera — sistem persediaan dan penjualan." />
     <title>Tera</title>
   </head>
   <body>

@@ -63,7 +63,20 @@ body {
   padding: var(--pad);
 }
 
+/* Brand lockup: the mark and the word sit on one baseline and never wrap.
+   The mark is the only decoration in this UI. It earns its place in the
+   browser tab, where a shop PC has this open all day beside everything else
+   and the word alone is truncated away. */
+.merek { display: flex; align-items: center; gap: 10px; }
+.merek h1 { margin: 0; }
+.merek-tanda { flex: none; display: block; }
+
+.merek-besar { justify-content: center; margin-bottom: 4px; }
+.merek-besar h1 { font-size: 28px; }
+
 .sidebar h1 { font-size: 20px; margin: 0 0 4px; }
+.sidebar .merek { margin-bottom: 4px; }
+.sidebar .merek h1 { margin: 0; }
 .sidebar .entity { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
 .sidebar nav { display: flex; flex-direction: column; gap: 2px; }
 
@@ -143,8 +156,8 @@ th { font-size: 13px; color: var(--muted); font-weight: 600; }
   padding: var(--pad);
 }
 .masuk .card { width: 100%; max-width: 380px; }
-.masuk h1 { margin: 0 0 4px; }
-.masuk p.sub { margin: 0 0 20px; color: var(--muted); }
+.masuk h1 { margin: 0; }
+.masuk p.sub { margin: 0 0 20px; color: var(--muted); text-align: center; }
 .masuk button { width: 100%; }
 
 .kosong { color: var(--muted); padding: 24px 0; }
