@@ -1,37 +1,186 @@
-/* Tera — a shop-floor UI. Large targets, high contrast, no decoration.
-   The cashier uses this all day under fluorescent light; the owner reads
-   margin figures on a phone. Both matter more than looking modern. */
+/* Tera — a shop-floor UI.
+ *
+ * The cashier uses this all day under fluorescent light; the owner reads margin
+ * figures on a phone in the evening. Both matter more than looking modern, so
+ * the rules here are: large targets, honest contrast, and no decoration that
+ * costs legibility.
+ *
+ * # Where the palette comes from
+ *
+ * The neutral ramp and semantic colours are lifted from the Sayzolo design
+ * system (packages/ui/theme/colors.ts) — the same 50→900 greys and the same
+ * success/warning/error families, so this looks like it belongs to the same
+ * hand. Primary is their `green` preset rather than the blue, because green is
+ * what this product already was.
+ *
+ * # Why the typeface is not Inter
+ *
+ * Sayzolo uses Inter, loaded from Google Fonts. This cannot: INV-11 says the
+ * shop keeps trading with no internet, and a web font would block the UI the
+ * moment the line drops — TestNothingReachesTheInternet fails the build on any
+ * CDN reference. The system stack below resolves to SF Pro on macOS/iOS and
+ * Segoe UI Variable on Windows, which are genuinely good and cost nothing.
+ *
+ * # The type scale is six steps and three weights
+ *
+ * Nothing outside this file may invent a size or a weight. An earlier version
+ * had fifteen sizes and seven weights spread across 209 inline styles, and the
+ * result read as drift rather than hierarchy: 13 beside 13.5, 620 beside 650.
+ * Weights in particular were a trap — a variable system font renders 620 and
+ * 650 differently by an amount nobody perceives, and a static fallback font
+ * collapses all seven into two, so the hierarchy changed by machine.
+ */
 
 :root {
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --border: #d8dce3;
-  --text: #16191f;
-  --muted: #5b6572;
-  --accent: #14562f;
+  /* Neutral ramp — Sayzolo packages/ui/theme/colors.ts */
+  --n50: #f8f9fa;
+  --n100: #f3f4f6;
+  --n200: #e5e7eb;
+  --n300: #d2d6db;
+  --n400: #9da4ae;
+  --n500: #6c737f;
+  --n600: #4d5761;
+  --n700: #2f3746;
+  --n800: #1c2536;
+  --n900: #111927;
+
+  /* Primary — Sayzolo's `green` preset. */
+  --accent-lightest: #f6fef9;
+  --accent-light: #edfcf2;
+  --accent: #16b364;
+  --accent-dark: #087443;
+  --accent-darkest: #084c2e;
   --accent-text: #ffffff;
-  --danger: #9b1c1c;
-  --danger-bg: #fdeaea;
-  --warn-bg: #fff6e0;
-  --warn-border: #e2b04a;
-  --radius: 8px;
-  --pad: 16px;
-  color-scheme: light dark;
+
+  /* Semantic — Sayzolo error / warning / info. */
+  --danger: #b42318;
+  --danger-strong: #f04438;
+  --danger-bg: #fef3f2;
+  --danger-border: #fee4e2;
+  --warn: #b54708;
+  --warn-bg: #fffaeb;
+  --warn-border: #fef0c7;
+  --info: #0e7090;
+  --info-bg: #ecfdff;
+  --ok: #087443;
+  --ok-bg: #edfcf2;
+  --ok-border: #a6f4c5;
+
+  /* Surfaces */
+  --bg: var(--n100);
+  --surface: #ffffff;
+  --surface-2: var(--n50);
+  --sidebar-bg: #ffffff;
+  --border: var(--n200);
+  --border-strong: var(--n300);
+  --text: var(--n900);
+  --muted: var(--n500);
+
+  /* One layered shadow, used sparingly. Sayzolo's card elevation. */
+  --shadow: 0 1px 2px rgba(17, 25, 39, 0.04), 0 0 0 0.5px rgba(17, 25, 39, 0.04);
+  --shadow-lg: 0 5px 22px rgba(17, 25, 39, 0.08), 0 0 0 0.5px rgba(17, 25, 39, 0.05);
+
+  /* --- type scale. Six steps, three weights. Nothing else. --- */
+  --t-xs: 12px;    /* badges, fine print, uppercase micro-labels */
+  --t-sm: 13px;    /* field labels, hints, secondary copy */
+  --t-base: 15px;  /* body, table cells, buttons — the default */
+  --t-lg: 18px;    /* section headings, the till search */
+  --t-xl: 22px;    /* page titles */
+  --t-2xl: 28px;   /* the one figure a screen exists to show */
+
+  --w-normal: 400;
+  --w-medium: 600;
+  --w-bold: 700;
+
+  /* --- spacing. Multiples of 4, named so layout can be read. --- */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+
+  --radius: 10px;
+  --radius-sm: 7px;
+  --pad: var(--s-4);
+
+  /* Reports stop spreading somewhere a human eye can still track a row. */
+  --measure-app: 1320px;
+
+  color-scheme: light;
+}
+
+/* Dark. Applied by an explicit choice on <html data-theme>, and by the system
+ * preference only when nobody has chosen — so the toggle always wins. */
+:root[data-theme='dark'] {
+  --accent-lightest: #084c2e;
+  --accent-light: #087443;
+  --accent: #16b364;
+  --accent-dark: #3fc79a;
+  --accent-text: #04170d;
+
+  --danger: #fda29b;
+  --danger-strong: #f04438;
+  --danger-bg: #3a1a17;
+  --danger-border: #7a271a;
+  --warn: #fec84b;
+  --warn-bg: #3a2c14;
+  --warn-border: #7a2e0e;
+  --info: #67e3f9;
+  --info-bg: #164c63;
+  --ok: #75e0a7;
+  --ok-bg: #0d2a1c;
+  --ok-border: #085d3a;
+
+  --bg: #0e1320;
+  --surface: var(--n900);
+  --surface-2: #16203a;
+  --sidebar-bg: #0b101b;
+  --border: #2d3748;
+  --border-strong: #3d4a5f;
+  --text: #edf2f7;
+  --muted: #a0aec0;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 0.5px rgba(255, 255, 255, 0.04);
+  --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+
+  color-scheme: dark;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14171c;
-    --surface: #1c2027;
-    --border: #333a45;
-    --text: #eef1f5;
-    --muted: #9aa4b2;
-    --accent: #3fa16a;
-    --accent-text: #07120b;
-    --danger: #f8a5a5;
-    --danger-bg: #3a1c1c;
-    --warn-bg: #3a3020;
-    --warn-border: #8a6c2a;
+  :root:not([data-theme='light']) {
+    --accent-lightest: #084c2e;
+    --accent-light: #087443;
+    --accent: #16b364;
+    --accent-dark: #3fc79a;
+    --accent-text: #04170d;
+
+    --danger: #fda29b;
+    --danger-strong: #f04438;
+    --danger-bg: #3a1a17;
+    --danger-border: #7a271a;
+    --warn: #fec84b;
+    --warn-bg: #3a2c14;
+    --warn-border: #7a2e0e;
+    --info: #67e3f9;
+    --info-bg: #164c63;
+    --ok: #75e0a7;
+    --ok-bg: #0d2a1c;
+    --ok-border: #085d3a;
+
+    --bg: #0e1320;
+    --surface: var(--n900);
+    --surface-2: #16203a;
+    --sidebar-bg: #0b101b;
+    --border: #2d3748;
+    --border-strong: #3d4a5f;
+    --text: #edf2f7;
+    --muted: #a0aec0;
+
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 0.5px rgba(255, 255, 255, 0.04);
+    --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+
+    color-scheme: dark;
   }
 }
 
@@ -39,12 +188,22 @@
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  font-size: 16px;
-  line-height: 1.5;
+  font-family: system-ui, -apple-system, 'Segoe UI Variable Text', 'Segoe UI',
+    Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: var(--t-base);
+  line-height: 1.55;
   background: var(--bg);
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+h1, h2, h3, h4 { line-height: 1.3; letter-spacing: -0.011em; text-wrap: balance; }
+h2 { font-size: var(--t-xl); font-weight: var(--w-bold); }
+h3 { font-size: var(--t-lg); font-weight: var(--w-medium); margin: 0 0 var(--s-3); }
+h4 { font-size: var(--t-base); font-weight: var(--w-medium); margin: 0 0 var(--s-2); }
+
+a { color: var(--accent-dark); }
 
 /* Rupiah figures line up in columns and never reflow as digits change. */
 .angka {
@@ -52,73 +211,463 @@ body {
   text-align: right;
   white-space: nowrap;
 }
+/* The same digits when they head a block rather than a column. */
+.angka-kiri { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* An ISO date inside running prose. The hyphens are break opportunities, so
+   without this "2026-08-24" wraps as "2026-08-" / "24". */
+.tgl { white-space: nowrap; }
+
+/* --- typography utilities -------------------------------------------------- */
+
+/* Secondary prose. Distinct from .kosong, which means *there is nothing here* —
+   an earlier version used one class for both, so real instructions rendered in
+   the same grey as "no records found" and read as absence. */
+.catatan {
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+p.catatan { margin: 0 0 var(--s-3); max-width: 78ch; }
+
+/* The page's own subtitle, directly under its <h2>. */
+.sub-judul {
+  color: var(--muted);
+  margin: 0 0 var(--s-5);
+  max-width: 78ch;
+}
+
+.mikro {
+  font-size: var(--t-xs);
+  font-weight: var(--w-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+/* --- shell ---------------------------------------------------------------- */
 
 .app { display: flex; min-height: 100vh; }
 
 .sidebar {
-  width: 220px;
-  flex: 0 0 220px;
-  background: var(--surface);
+  width: 232px;
+  flex: 0 0 232px;
+  background: var(--sidebar-bg);
   border-right: 1px solid var(--border);
-  padding: var(--pad);
+  padding: 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
 }
 
-.sidebar h1 { font-size: 20px; margin: 0 0 4px; }
-.sidebar .entity { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+.merek {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 6px 2px;
+}
+
+/* The mark. A square, not an image: an <img> is one more thing to load and
+   one more thing that can fail with no internet. */
+.merek-tanda {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: var(--s-2);
+  background: var(--accent);
+  color: var(--accent-text);
+  display: grid;
+  place-items: center;
+  font-weight: var(--w-bold);
+  font-size: var(--t-base);
+}
+
+.sidebar h1 {
+  font-size: var(--t-lg);
+  font-weight: var(--w-bold);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.sidebar .entity {
+  color: var(--muted);
+  font-size: var(--t-sm);
+  margin: 0 0 var(--s-3);
+  padding: 0 6px;
+}
+
+.pilih-perusahaan { padding: 0 6px var(--s-2); }
+.pilih-perusahaan select { font-size: var(--t-sm); padding: 7px 9px; }
+
 .sidebar nav { display: flex; flex-direction: column; gap: 2px; }
 
+/* A group of links under one heading. The menu is long enough that a flat list
+   makes people read all of it to find one thing.
+
+   The order is the order the app has to be used in, not the order the features
+   rank in importance. Master data first, because a product cannot be attributed
+   to an owner who does not exist yet and owner attribution is what every margin
+   figure rests on (INV-8). */
+.nav-grup { margin-top: var(--s-4); }
+.nav-grup:first-of-type { margin-top: var(--s-1); }
+
+.nav-label {
+  font-size: var(--t-xs);
+  font-weight: var(--w-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 0 var(--s-2) 5px;
+}
+
 .sidebar nav a {
-  display: block;
-  padding: 10px 12px;
-  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--s-2) 10px;
+  border-radius: var(--radius-sm);
   color: var(--text);
   text-decoration: none;
+  font-size: var(--t-base);
+  font-weight: var(--w-normal);
+  transition: background 0.12s ease, color 0.12s ease;
 }
-.sidebar nav a:hover { background: var(--bg); }
-.sidebar nav a.active { background: var(--accent); color: var(--accent-text); font-weight: 600; }
 
-.main { flex: 1; padding: 24px; min-width: 0; }
-.main h2 { margin-top: 0; }
+.sidebar nav a:hover { background: var(--surface-2); }
+
+.sidebar nav a.active {
+  background: var(--accent-light);
+  color: var(--accent-darkest);
+  font-weight: var(--w-medium);
+}
+
+:root[data-theme='dark'] .sidebar nav a.active { color: #d3f8e4; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .sidebar nav a.active { color: #d3f8e4; }
+}
+
+/* A fixed glyph column, so labels line up whether or not a row has an icon.
+   The icons are inline SVG drawn on a 24-unit grid at a single stroke weight —
+   an earlier version used Unicode symbols (⌗ for the till, § for tax), which
+   resolve to a different font on every machine, sit on different baselines, and
+   were not learnable. */
+.nav-ikon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  display: block;
+  opacity: 0.65;
+}
+.sidebar nav a.active .nav-ikon { opacity: 1; }
+
+.sidebar-kaki {
+  margin-top: auto;
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.main {
+  flex: 1;
+  padding: 26px 28px 56px;
+  min-width: 0;
+}
+
+/* Reports stop spreading at a width a human eye can still track a row across.
+   Without this a six-column margin table runs the full width of a 27" monitor
+   and reading one row means moving your head. */
+.main-isi { max-width: var(--measure-app); }
+
+.main-isi > h2 { margin: 0 0 var(--s-1); }
+.main-isi > h2 + p { margin-top: 0; }
+
+/* --- theme toggle --------------------------------------------------------- */
+
+.tema {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.tema button {
+  flex: 1;
+  min-height: 0;
+  padding: 5px var(--s-1);
+  font-size: var(--t-xs);
+  font-weight: var(--w-medium);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.tema button.aktif {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+/* --- surfaces ------------------------------------------------------------- */
 
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: var(--pad);
+  box-shadow: var(--shadow);
 }
 
-label { display: block; margin-bottom: 12px; }
-label span { display: block; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
+/* Cards in a column, spaced by the layout rather than by margins on each card. */
+.tumpuk {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.card > :first-child { margin-top: 0; }
+.card > :last-child { margin-bottom: 0; }
+
+/* A card whose children are spaced by the layout rather than by their own
+   margins. Anything that stacks a heading, a figure and a note uses this, so
+   the gap is declared once instead of as a margin on each block. */
+.card.rapi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  align-items: stretch;
+}
+.card.rapi > * { margin: 0; }
+
+/* A card's own header row: title on the left, controls on the right. */
+.card-kepala {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--s-3);
+}
+.card-kepala > h3 { margin: 0; }
+/* A control sitting in a card's header row — a period picker, a month input —
+   is laid out by the header's flex gap, not by its own bottom margin. */
+.card-kepala label, .pilih-perusahaan label { margin-bottom: 0; }
+
+/* A table caption used as a row count above the cart. */
+caption.mikro { text-align: left; padding-bottom: var(--s-1); }
+
+/* --- forms ---------------------------------------------------------------- */
+
+label { display: block; margin-bottom: var(--s-3); }
+label > span {
+  display: block;
+  font-size: var(--t-sm);
+  font-weight: var(--w-medium);
+  color: var(--muted);
+  margin-bottom: 5px;
+}
 
 input, select, button, textarea {
   font: inherit;
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
   background: var(--surface);
   color: var(--text);
   width: 100%;
 }
 
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible,
+a:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+input::placeholder { color: var(--n400); }
+
+input:disabled, select:disabled, textarea:disabled {
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.petunjuk {
+  display: block;
+  font-size: var(--t-sm);
+  color: var(--muted);
+  margin-top: var(--s-1);
+}
+
 button {
   background: var(--accent);
   color: var(--accent-text);
-  border: none;
-  font-weight: 600;
+  border: 1px solid transparent;
+  font-weight: var(--w-medium);
   cursor: pointer;
   width: auto;
+  /* 44px is the touch target a cashier hits without looking. Everything that
+     is genuinely a button keeps it; the two exceptions below are declared. */
   min-height: 44px;
-  padding: 10px 20px;
+  padding: 10px 18px;
+  transition: filter 0.12s ease;
 }
-button:disabled { opacity: 0.5; cursor: not-allowed; }
-button.sekunder { background: transparent; color: var(--text); border: 1px solid var(--border); }
+button:hover:not(:disabled) { filter: brightness(0.94); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+button.sekunder {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+button.sekunder:hover:not(:disabled) { background: var(--surface-2); filter: none; }
+
+button.bahaya { background: var(--danger-strong); color: #fff; }
+
+/* A control that lives inside a table row rather than beside a form: the
+   drill-down toggles and the row actions. Smaller on purpose and stated once
+   here, rather than overridden inline on six different screens. */
+button.dalam-baris {
+  min-height: 32px;
+  padding: var(--s-1) 10px;
+  font-size: var(--t-sm);
+  line-height: 1.2;
+}
+
+/* An icon-only square. Always carries an aria-label. */
+button.ikon-saja {
+  min-height: 32px;
+  width: 32px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  line-height: 1;
+}
+
+/* A row of buttons that stay together and wrap as a unit. */
+.aksi {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* A link that acts as a button. Used for the data export, which is a plain
+   href so the browser downloads the file and a several-megabyte archive never
+   sits in the page's memory — a <button> inside an <a> is not valid markup. */
+a.tombol {
+  display: inline-flex;
+  align-items: center;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: var(--w-medium);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  padding: 10px 18px;
+  min-height: 44px;
+  border: 1px solid transparent;
+}
+a.tombol.sekunder {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+a.tombol.sekunder:hover { background: var(--surface-2); }
+a.tombol.kecil { min-height: 34px; padding: var(--s-1) var(--s-3); font-size: var(--t-sm); }
+
+/* A row of fields side by side on a laptop, stacked on a phone. */
+.baris {
+  display: grid;
+  gap: var(--s-3);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+.baris > label { margin-bottom: 0; }
+
+/* --- filter chips --------------------------------------------------------- */
+
+/* Not buttons. A category filter is a state you are in, and rendering eight of
+   them as 44px primary blocks turns the top of the till into a wall of green. */
+.chip-baris {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+button.chip {
+  min-height: 32px;
+  padding: 5px var(--s-3);
+  font-size: var(--t-sm);
+  font-weight: var(--w-medium);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--border-strong);
+  width: auto;
+}
+button.chip:hover:not(:disabled) { background: var(--surface-2); filter: none; }
+button.chip[aria-pressed='true'] {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: var(--accent-darkest);
+}
+:root[data-theme='dark'] button.chip[aria-pressed='true'] { color: #d3f8e4; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) button.chip[aria-pressed='true'] { color: #d3f8e4; }
+}
+
+/* --- tabs ----------------------------------------------------------------- */
+
+.tab-baris {
+  display: flex;
+  gap: var(--s-1);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--s-4);
+  overflow-x: auto;
+}
+
+button.tab {
+  min-height: 40px;
+  padding: var(--s-2) var(--s-4);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--muted);
+  font-weight: var(--w-medium);
+  white-space: nowrap;
+  width: auto;
+}
+button.tab:hover:not(:disabled) { background: var(--surface-2); filter: none; }
+button.tab[aria-selected='true'] {
+  color: var(--accent-dark);
+  border-bottom-color: var(--accent);
+}
+
+/* --- feedback ------------------------------------------------------------- */
 
 .galat {
   background: var(--danger-bg);
   color: var(--danger);
-  border-radius: var(--radius);
-  padding: 12px;
-  margin-bottom: 12px;
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-sm);
+  padding: 11px var(--s-3);
+  margin-bottom: var(--s-3);
+  font-size: var(--t-base);
+}
+
+.berhasil {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border: 1px solid var(--ok-border);
+  border-radius: var(--radius-sm);
+  padding: 11px var(--s-3);
+  margin-bottom: var(--s-3);
+  font-size: var(--t-base);
 }
 
 /* Compliance disclaimer. Required on every screen showing a tax figure,
@@ -126,25 +675,570 @@ button.sekunder { background: transparent; color: var(--text); border: 1px solid
 .disclaimer {
   background: var(--warn-bg);
   border: 1px solid var(--warn-border);
-  border-radius: var(--radius);
-  padding: 12px;
-  font-size: 14px;
-  margin-top: 20px;
+  color: var(--warn);
+  border-radius: var(--radius-sm);
+  padding: 11px var(--s-3);
+  font-size: var(--t-sm);
+  margin-top: var(--s-4);
 }
 
-table { width: 100%; border-collapse: collapse; }
-th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; }
-th { font-size: 13px; color: var(--muted); font-weight: 600; }
+/* The one decision on a screen that changes everything downstream. Used for
+   the faktur toggle on the purchasing screen: one checkbox that moves the cost
+   of every layer on the invoice by about 11% (INV-9, SPEC §3.2), and the thing
+   the business currently cannot see at all. */
+.sorotan {
+  background: var(--warn-bg);
+  border: 2px solid var(--warn-border);
+  border-radius: var(--radius);
+  padding: var(--s-4);
+  margin: var(--s-4) 0;
+}
+.sorotan > :last-child { margin-bottom: 0; }
+.sorotan .akibat { margin: var(--s-3) 0 0; font-size: var(--t-base); }
+
+/* There is nothing here. Only that — secondary prose uses .catatan. */
+.kosong {
+  color: var(--muted);
+  padding: var(--s-5) 0;
+  font-size: var(--t-base);
+  text-align: center;
+}
+td > .kosong, .kosong.rapat { padding: var(--s-2) 0; text-align: left; }
+
+/* A short status word beside a row: berlaku, belum berlaku, sudah berakhir. */
+.lencana {
+  display: inline-block;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: var(--t-xs);
+  font-weight: var(--w-medium);
+  white-space: nowrap;
+}
+
+/* A badge that has stopped being neutral: the omzet clock at WARN or CROSSED. */
+.lencana-bahaya {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-color: var(--danger-border);
+}
+.lencana-aman { background: var(--ok-bg); color: var(--ok); border-color: var(--ok-border); }
+.lencana-hati { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-border); }
+
+.teks-bahaya { color: var(--danger); }
+.teks-redup { color: var(--muted); }
+
+/* --- statistics ----------------------------------------------------------- */
+
+/* One figure with its label. The dashboard and every report summary use this
+   rather than each inventing its own stack of two divs. */
+.statistik {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--s-4) var(--s-5);
+}
+
+.stat > .stat-label {
+  display: block;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  margin-bottom: 2px;
+}
+.stat > .stat-nilai {
+  display: block;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-lg);
+  font-weight: var(--w-medium);
+  line-height: 1.25;
+}
+.stat.besar > .stat-nilai { font-size: var(--t-2xl); font-weight: var(--w-bold); }
+.stat > .stat-kaki { display: block; color: var(--muted); font-size: var(--t-sm); margin-top: 2px; }
+
+/* --- dashboard ------------------------------------------------------------ */
+
+.dasbor-atas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--s-5);
+}
+
+/* A card whose whole surface navigates. */
+a.kartu-tautan {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+a.kartu-tautan:hover { border-color: var(--accent); box-shadow: var(--shadow-lg); }
+
+/* The first-run checklist. A numbered sequence, because it is one. */
+.langkah {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3) 0;
+  border-top: 1px solid var(--border);
+}
+.langkah:first-of-type { border-top: none; }
+.langkah-no {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.langkah.selesai .langkah-no {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: var(--accent-darkest);
+}
+.langkah-teks > strong { display: block; font-weight: var(--w-medium); }
+.langkah-teks > span { color: var(--muted); font-size: var(--t-sm); }
+
+/* --- the till ------------------------------------------------------------- */
+
+/* Products on the left, the cart on the right. Declared here rather than
+   inline on the component, because an inline grid cannot be reached by a media
+   query — the previous version was a fixed two-column grid with a 320px
+   minimum on the cart, so the whole till overflowed sideways below about
+   800px. That is the screen the cashier uses all day, on whatever is on the
+   counter. */
+.kasir {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--s-4);
+  align-items: start;
+}
+
+@media (max-width: 1000px) {
+  .kasir { grid-template-columns: minmax(0, 1fr); }
+}
+
+.kasir-samping {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  position: sticky;
+  top: var(--s-4);
+}
+@media (max-width: 1000px) {
+  .kasir-samping { position: static; }
+}
+
+/* The barcode field. Bigger than everything else on the screen because it is
+   where the cashier's attention starts every transaction. */
+.kasir-cari {
+  font-size: var(--t-lg);
+  padding: var(--s-3);
+}
+
+.kasir-rak {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: var(--s-2);
+  /* Viewport-relative, so a 1080p till screen is not two-thirds empty and a
+     laptop still gets a product grid it can scroll. */
+  max-height: 46vh;
+  overflow-y: auto;
+  padding-right: var(--s-1);
+}
+
+button.ubin {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 62px;
+  text-align: left;
+  padding: 10px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  font-weight: var(--w-normal);
+}
+button.ubin:hover:not(:disabled) { background: var(--accent-light); border-color: var(--accent); filter: none; }
+button.ubin > .ubin-nama { display: block; font-weight: var(--w-medium); line-height: 1.3; }
+button.ubin > .ubin-ket { display: block; font-size: var(--t-sm); color: var(--muted); margin-top: 2px; }
+button.ubin > .ubin-habis { display: block; font-size: var(--t-sm); color: var(--danger); margin-top: 2px; }
+
+/* The running total. The one number on the screen the customer is also
+   watching, so it gets the largest size in the scale. */
+.kasir-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s-3);
+  padding: var(--s-3) 0;
+  border-top: 1px solid var(--border);
+  margin-top: var(--s-3);
+}
+.kasir-total > .label { font-size: var(--t-lg); font-weight: var(--w-medium); }
+.kasir-total > .nilai {
+  font-size: var(--t-2xl);
+  font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+button.bayar {
+  width: 100%;
+  font-size: var(--t-lg);
+  min-height: 54px;
+}
+
+/* --- tables --------------------------------------------------------------- */
+
+table { width: 100%; border-collapse: collapse; font-size: var(--t-base); }
+
+th, td {
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+th:first-child, td:first-child { padding-left: 0; }
+th:last-child, td:last-child { padding-right: 0; }
+
+th {
+  font-size: var(--t-xs);
+  font-weight: var(--w-medium);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom-color: var(--border-strong);
+  white-space: nowrap;
+}
+
+tbody tr:last-child td { border-bottom: none; }
+/* Every row is opaque — head and foot included. On a phone the leading column
+   is pinned while the figures scroll under it, and a cell inheriting a
+   transparent background would let them show through it. */
+tr { background: var(--surface); }
+tbody tr:hover { background: var(--surface-2); }
+
+tfoot td {
+  border-top: 2px solid var(--border-strong);
+  border-bottom: none;
+  font-weight: var(--w-medium);
+  padding-top: 11px;
+}
+
+/* Sortable column headers. */
+th > button.urut {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+}
+th > button.urut:hover { color: var(--text); }
+th > button.urut:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+th .panah { opacity: 0.5; font-size: 9px; }
+th[aria-sort] .panah { opacity: 1; }
+
+/* Wide tables scroll inside their card rather than pushing the page sideways.
+   Every table in the application is wrapped in one of these — the Pajak rules
+   table is ten columns wide and the margin returns table is nine. */
+.tabel-gulir {
+  overflow-x: auto;
+  /* A scroll container is focusable for keyboard users; give it a real ring. */
+  scrollbar-width: thin;
+}
+/* The table fills its container and wraps prose cells; it scrolls only when
+   its own minimum — set by the nowrap headers and figures — genuinely exceeds
+   the space. Forcing `max-content` here pushed the rightmost column off screen
+   the moment any cell held a long line, which on the margin report meant
+   scrolling sideways to read Margin. */
+.tabel-gulir > table { min-width: 100%; }
+
+/* A drill-down row: the detail that opens under the row it belongs to. */
+tr.rincian, tr.rincian:hover { background: var(--bg); }
+tr.rincian > td {
+  padding-top: var(--s-3);
+  padding-bottom: var(--s-3);
+}
+
+/* Indentation inside a single-table drill-down. The margin report nests four
+   levels — owner, sale, product, FIFO layer — and used to render a separate
+   <table> at each level inside a <td colSpan>, so no column lined up with the
+   one above it and every level repeated its own header row. One table, one
+   column grid, indentation carried by this. */
+.tingkat-1 { padding-left: var(--s-5); }
+.tingkat-2 { padding-left: calc(var(--s-5) * 2); }
+.tingkat-3 { padding-left: calc(var(--s-5) * 3); }
+
+tr.baris-2 { background: color-mix(in srgb, var(--surface-2) 60%, var(--surface)); }
+tr.baris-3 { background: color-mix(in srgb, var(--surface-2) 85%, var(--surface)); }
+tr.baris-4 { background: var(--surface-2); }
+tr.baris-4 > td { font-size: var(--t-sm); }
+
+details > summary {
+  cursor: pointer;
+  padding: 9px 0;
+  font-weight: var(--w-medium);
+  font-size: var(--t-base);
+}
+details > summary:hover { color: var(--accent-dark); }
+
+/* --- search / toolbar ----------------------------------------------------- */
+
+.alat {
+  display: flex;
+  gap: var(--s-3);
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: var(--s-3);
+}
+.alat > label { margin-bottom: 0; }
+.alat .cari { flex: 1 1 240px; max-width: 380px; }
+.alat .hitung { color: var(--muted); font-size: var(--t-sm); margin-left: auto; }
+
+/* --- login ---------------------------------------------------------------- */
 
 .masuk {
   min-height: 100vh;
   display: grid;
   place-items: center;
   padding: var(--pad);
+  background: var(--bg);
 }
-.masuk .card { width: 100%; max-width: 380px; }
-.masuk h1 { margin: 0 0 4px; }
-.masuk p.sub { margin: 0 0 20px; color: var(--muted); }
-.masuk button { width: 100%; }
+.masuk .card { width: 100%; max-width: 380px; box-shadow: var(--shadow-lg); }
+.masuk .merek { padding: 0; margin-bottom: var(--s-4); }
+.masuk h1 { margin: 0; font-size: var(--t-xl); }
+.masuk p.sub { margin: 0 0 var(--s-5); color: var(--muted); font-size: var(--t-base); }
+.masuk button[type='submit'] { width: 100%; }
 
-.kosong { color: var(--muted); padding: 24px 0; }
+/* --- modal ---------------------------------------------------------------- */
+
+/* Every dialog in the application, including the blocking confirmation for a
+   transfer that destroys input PPN credit (R4.5). Deliberately a modal over a
+   dimmed page rather than a toast: the credit is gone the moment the transfer
+   commits, so the only useful place for this is in front of the person, before
+   they can carry on.
+   Focus is trapped, Escape closes, and a backdrop click does not — a dialog
+   holding a half-typed payment must not lose it to a stray click. */
+.modal-latar {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 25, 39, 0.6);
+  display: grid;
+  place-items: center;
+  padding: var(--pad);
+  z-index: 100;
+}
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: var(--s-5);
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.modal > :first-child { margin-top: 0; }
+.modal h3 { margin: 0 0 var(--s-3); }
+.modal .modal-aksi {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  margin-top: var(--s-5);
+}
+
+/* A dialog announcing something irreversible. */
+.modal.gawat {
+  border-color: var(--danger-strong);
+  border-top: 4px solid var(--danger-strong);
+}
+.modal.gawat > h3 { color: var(--danger); }
+.modal .angka-besar {
+  display: block;
+  font-size: var(--t-2xl);
+  font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums;
+  margin-top: var(--s-1);
+}
+
+/* A checkbox with its explanation beside it rather than under it. */
+.centang {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.centang > input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+.centang > span { margin: 0; }
+
+/* --- print ---------------------------------------------------------------- */
+
+/* The receipt, as monospace text exactly as the printer will lay it out. */
+.struk {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--s-3);
+  font-size: var(--t-sm);
+  overflow-x: auto;
+  margin: 0;
+}
+
+/* --- phones --------------------------------------------------------------- */
+
+/* The owner reads margin figures on a phone in the evening (CLAUDE.md), so this
+   is not a courtesy breakpoint — it is one of the two screens the product is
+   for. The other, the till, sits on a counter and gets the same treatment for
+   free.
+
+   The sidebar collapses to a bar with a menu button rather than becoming a
+   wrapped strip of seventeen links across the top of every page. */
+@media (max-width: 880px) {
+  .app { flex-direction: column; }
+
+  .sidebar {
+    width: auto;
+    flex: none;
+    height: auto;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 10px var(--s-3);
+    gap: 0;
+  }
+
+  .sidebar-atas {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-3);
+  }
+
+  .sidebar .entity,
+  .pilih-perusahaan,
+  .sidebar nav,
+  .sidebar-kaki {
+    display: none;
+  }
+
+  .sidebar.terbuka {
+    max-height: 100vh;
+    overflow-y: auto;
+  }
+  .sidebar.terbuka .entity { display: block; margin-top: var(--s-3); }
+  .sidebar.terbuka .pilih-perusahaan { display: block; }
+  .sidebar.terbuka nav { display: flex; flex-direction: column; margin-top: var(--s-2); }
+  .sidebar.terbuka .sidebar-kaki { display: flex; }
+
+  /* A menu row is a tap target, not a text link. */
+  .sidebar nav a { padding: 11px 10px; }
+
+  .main { padding: var(--s-4) var(--s-3) 40px; }
+
+  /* A heading and its action stack rather than squeezing the button. */
+  .card-kepala { flex-direction: column; align-items: stretch; gap: var(--s-2); }
+  .card-kepala > button, .card-kepala > .aksi { width: 100%; }
+
+  /* A primary action on a phone spans the thumb, not a corner of it. */
+  .aksi > button, .aksi > a.tombol { flex: 1 1 160px; justify-content: center; }
+
+  .alat { gap: var(--s-2); }
+  .alat .cari { flex: 1 1 100%; max-width: none; }
+  .alat .hitung { margin-left: 0; }
+
+  .modal {
+    max-height: calc(100vh - var(--s-4));
+    padding: var(--s-4);
+  }
+  .modal-aksi > button { flex: 1 1 140px; }
+
+  /* The till scrolls as one page; capping the shelf just adds a second
+     scrollbar inside the first. */
+  .kasir-rak { max-height: none; }
+
+  .langkah { grid-template-columns: 26px minmax(0, 1fr); gap: var(--s-2) var(--s-3); }
+  .langkah > .lencana, .langkah > a.tombol { grid-column: 2; justify-self: start; }
+
+  /* --- wide tables on a narrow screen ------------------------------------
+     The figures scroll sideways; the column that says which row you are
+     reading does not. Without this, scrolling right on a seven-column margin
+     report loses the owner's name, which is the whole context for the number
+     under your thumb. */
+  th, td { padding: var(--s-2) 9px; }
+  .tabel-gulir table { font-size: var(--t-sm); }
+
+  .tabel-gulir > table > * > tr > :first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: inherit;
+  }
+  .tabel-gulir:not(.lengket-2) > table > * > tr > :first-child {
+    box-shadow: 1px 0 0 var(--border);
+  }
+
+  /* Drill-down tables lead with a toggle, so the label is the second column
+     and both have to stay put for the first to mean anything. */
+  .tabel-gulir.lengket-2 > table > * > tr > :nth-child(1) {
+    width: 44px;
+    min-width: 44px;
+  }
+  .tabel-gulir.lengket-2 > table > * > tr > :nth-child(2) {
+    position: sticky;
+    left: 44px;
+    z-index: 1;
+    background: inherit;
+    box-shadow: 1px 0 0 var(--border);
+    min-width: 150px;
+  }
+}
+
+/* Small phones. Two figures side by side at 360px are two cramped figures. */
+@media (max-width: 520px) {
+  .statistik { grid-template-columns: minmax(0, 1fr); gap: var(--s-3); }
+  .dasbor-atas { grid-template-columns: minmax(0, 1fr); }
+  .baris { grid-template-columns: minmax(0, 1fr); }
+  .stat.besar > .stat-nilai { font-size: var(--t-xl); }
+  h2 { font-size: var(--t-lg); }
+  .main { padding: var(--s-3) var(--s-2) 32px; }
+}
+
+/* The menu button only exists on small screens. */
+.menu-tombol { display: none; }
+@media (max-width: 880px) {
+  .menu-tombol {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-2);
+    min-height: 44px;
+    padding: var(--s-2) var(--s-3);
+    flex: 0 0 auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+@media print {
+  .sidebar, .aksi, .alat, button { display: none !important; }
+  .main { padding: 0; }
+  .card { border: none; box-shadow: none; padding: 0; }
+}
+
+/* The first-run setup card carries more fields than a login, so it gets more
+   room than the 380px the login column uses. */
+.masuk .card.siapkan { max-width: 460px; }

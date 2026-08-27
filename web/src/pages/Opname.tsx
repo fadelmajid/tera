@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
-import { countSheet, listOpnames, startOpname, getOpname, saveOpnameLine, postOpname, KODE_ALASAN } from '../api/pembelian'
+import {
+  countSheet,
+  listOpnames,
+  startOpname,
+  getOpname,
+  saveOpnameLine,
+  postOpname,
+  KODE_ALASAN,
+} from '../api/pembelian'
 import type { OnHand, Opname, OpnameLine } from '../api/pembelian'
 import { ApiError } from '../api/client'
 import { formatIDR } from '../money'
-import { Galat } from '../components/dasar'
+import { Cari, Galat, Tabel, useCari } from '../components/dasar'
+import { Konfirmasi } from '../components/Modal'
 
 /**
  * Stock opname — physical count, variance, posting (TASKS 1.10, R12.4-5).
@@ -15,7 +24,10 @@ import { Galat } from '../components/dasar'
  * a transfer of money between family members labelled as a correction.
  *
  * Counting and posting are separate steps. Counting a shop takes hours; posting
- * is the moment stock actually moves.
+ * is the moment stock actually moves, and it cannot be undone — so it goes
+ * through the same kind of confirmation as any other irreversible act here,
+ * showing what is about to move before it moves. It used to be guarded by a
+ * required text field and nothing else.
  */
 export function OpnamePage({ entityId }: { entityId: string }) {
   const [daftar, setDaftar] = useState<Opname[]>([])
@@ -23,13 +35,14 @@ export function OpnamePage({ entityId }: { entityId: string }) {
   const [lines, setLines] = useState<OpnameLine[]>([])
   const [stok, setStok] = useState<OnHand[]>([])
   const [galat, setGalat] = useState<string | null>(null)
-  const [alasanPosting, setAlasanPosting] = useState('')
+  const [konfirmasi, setKonfirmasi] = useState(false)
   const [sedang, setSedang] = useState(false)
 
   const muat = useCallback(async () => {
     try {
-      setDaftar(await listOpnames(entityId))
-      setStok(await countSheet(entityId))
+      const [d, s] = await Promise.all([listOpnames(entityId), countSheet(entityId)])
+      setDaftar(d)
+      setStok(s)
       setGalat(null)
     } catch (err) {
       setGalat(err instanceof ApiError ? err.message : 'Gagal memuat data')
@@ -40,16 +53,19 @@ export function OpnamePage({ entityId }: { entityId: string }) {
     void muat()
   }, [muat])
 
-  async function buka(id: string) {
-    try {
-      const got = await getOpname(entityId, id)
-      setAktif(got.opname)
-      setLines(got.lines)
-      setGalat(null)
-    } catch (err) {
-      setGalat(err instanceof ApiError ? err.message : 'Gagal membuka opname')
-    }
-  }
+  const buka = useCallback(
+    async (id: string) => {
+      try {
+        const got = await getOpname(entityId, id)
+        setAktif(got.opname)
+        setLines(got.lines)
+        setGalat(null)
+      } catch (err) {
+        setGalat(err instanceof ApiError ? err.message : 'Gagal membuka opname')
+      }
+    },
+    [entityId],
+  )
 
   async function mulai() {
     setSedang(true)
@@ -85,12 +101,12 @@ export function OpnamePage({ entityId }: { entityId: string }) {
     }
   }
 
-  async function posting() {
+  async function posting(alasan: string) {
     if (!aktif) return
     setSedang(true)
     try {
-      await postOpname(entityId, aktif.id, alasanPosting)
-      setAlasanPosting('')
+      await postOpname(entityId, aktif.id, alasan)
+      setKonfirmasi(false)
       await muat()
       await buka(aktif.id)
     } catch (err) {
@@ -102,141 +118,214 @@ export function OpnamePage({ entityId }: { entityId: string }) {
 
   const terkunci = aktif?.status === 'POSTED'
   const selisih = lines.filter((l) => l.variance !== 0)
+  const tanpaAlasan = selisih.filter((l) => !l.reason_code)
+  const { q, setQ, hasil } = useCari(
+    stok,
+    (r) => `${r.product_name} ${r.owner_name ?? 'Perusahaan'}`,
+  )
 
   return (
     <>
       <h2>Opname stok</h2>
-      <p style={{ color: 'var(--muted)', marginTop: -8 }}>
+      <p className="sub-judul">
         Dihitung per pemilik, bukan per produk. Selisih harus masuk ke bucket satu orang.
       </p>
       <Galat pesan={galat} />
 
-      <div className="card" style={{ marginBottom: 20 }}>
-        <button onClick={() => void mulai()} disabled={sedang}>
-          Mulai opname baru
-        </button>
-        {daftar.length > 0 && (
-          <table style={{ marginTop: 12 }}>
-            <thead>
-              <tr>
-                <th>Tanggal</th>
-                <th>Status</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {daftar.map((o) => (
-                <tr key={o.id}>
-                  <td>{o.business_date}</td>
-                  <td>{o.status === 'POSTED' ? 'Sudah diposting' : 'Draf'}</td>
-                  <td>
-                    <button className="sekunder" onClick={() => void buka(o.id)}>
-                      Buka
-                    </button>
-                  </td>
+      <div className="tumpuk">
+        <div className="card">
+          <div className="card-kepala">
+            <h3>Opname</h3>
+            <button onClick={() => void mulai()} disabled={sedang}>
+              Mulai opname baru
+            </button>
+          </div>
+          {daftar.length === 0 ? (
+            <p className="kosong">Belum pernah ada opname.</p>
+          ) : (
+            <Tabel label="Riwayat opname">
+              <thead>
+                <tr>
+                  <th>Tanggal</th>
+                  <th>Status</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {daftar.map((o) => (
+                  <tr key={o.id}>
+                    <td>{o.business_date}</td>
+                    <td>
+                      {o.status === 'POSTED' ? (
+                        <span className="lencana lencana-aman">Sudah diposting</span>
+                      ) : (
+                        <span className="lencana lencana-hati">Draf</span>
+                      )}
+                    </td>
+                    <td>
+                      <button
+                        className="dalam-baris"
+                        onClick={() => void buka(o.id)}
+                        aria-label={`Buka opname ${o.business_date}`}
+                      >
+                        Buka
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Tabel>
+          )}
+        </div>
+
+        {aktif && (
+          <>
+            <div className="card">
+              <div className="card-kepala">
+                <h3>Hitung fisik — {aktif.business_date}</h3>
+                {terkunci ? (
+                  <span className="lencana lencana-aman">Sudah diposting, tidak bisa diubah</span>
+                ) : (
+                  <span className="lencana lencana-hati">Draf</span>
+                )}
+              </div>
+
+              {stok.length === 0 ? (
+                <p className="kosong">Belum ada stok untuk dihitung.</p>
+              ) : (
+                <>
+                  <div className="alat">
+                    <Cari nilai={q} ubah={setQ} petunjuk="Nama produk atau pemilik" />
+                    <span className="hitung">
+                      {hasil.length} dari {stok.length} baris
+                    </span>
+                  </div>
+                  <Tabel label="Lembar hitung fisik">
+                    <thead>
+                      <tr>
+                        <th>Produk</th>
+                        <th>Pemilik</th>
+                        <th className="angka">Sistem</th>
+                        <th style={{ width: 110 }}>Hitung</th>
+                        <th style={{ width: 190 }}>Alasan selisih</th>
+                        <th style={{ width: 180 }}>Catatan</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {hasil.map((row) => (
+                        <BarisHitung
+                          key={`${row.product_id}:${row.owner_id ?? 'company'}`}
+                          row={row}
+                          tersimpan={lines.find(
+                            (l) => l.product_id === row.product_id && l.owner_id === row.owner_id,
+                          )}
+                          terkunci={terkunci}
+                          simpan={simpanBaris}
+                        />
+                      ))}
+                    </tbody>
+                  </Tabel>
+                </>
+              )}
+            </div>
+
+            <div className="card">
+              <h3>Selisih</h3>
+              {selisih.length === 0 ? (
+                <p className="kosong">Belum ada selisih tercatat.</p>
+              ) : (
+                <Tabel label="Selisih hasil opname">
+                  <thead>
+                    <tr>
+                      <th>Produk</th>
+                      <th>Pemilik</th>
+                      <th className="angka">Sistem</th>
+                      <th className="angka">Hitung</th>
+                      <th className="angka">Selisih</th>
+                      <th>Alasan</th>
+                      <th className="angka">Harga satuan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selisih.map((l) => (
+                      <tr key={l.id}>
+                        <td>{l.product_name}</td>
+                        <td>{l.owner_name ?? 'Perusahaan'}</td>
+                        <td className="angka">{l.system_qty}</td>
+                        <td className="angka">{l.counted_qty}</td>
+                        <td className={l.variance < 0 ? 'angka teks-bahaya' : 'angka'}>
+                          {l.variance > 0 ? `+${l.variance}` : l.variance}
+                        </td>
+                        <td>
+                          {l.reason_code ?? (
+                            <span className="teks-bahaya">belum diisi</span>
+                          )}
+                        </td>
+                        <td className="angka">
+                          {l.unit_cost_idr === null ? '—' : formatIDR(l.unit_cost_idr)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Tabel>
+              )}
+
+              {!terkunci && (
+                <>
+                  {tanpaAlasan.length > 0 && (
+                    <div className="disclaimer">
+                      <strong>{tanpaAlasan.length} selisih belum punya alasan.</strong> Isi alasannya
+                      sebelum posting — sesudah stok bergerak, tidak ada lagi yang bisa menjelaskan
+                      ke mana barangnya pergi.
+                    </div>
+                  )}
+                  <div className="aksi">
+                    <button onClick={() => setKonfirmasi(true)} disabled={sedang}>
+                      Posting penyesuaian
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </>
         )}
       </div>
 
-      {aktif && (
-        <>
-          <div className="card" style={{ marginBottom: 20 }}>
-            <h3>
-              Hitung fisik — {aktif.business_date}{' '}
-              {terkunci && <span style={{ color: 'var(--muted)' }}>(sudah diposting, tidak bisa diubah)</span>}
-            </h3>
-            {stok.length === 0 ? (
-              <p className="kosong">Belum ada stok untuk dihitung.</p>
-            ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Produk</th>
-                    <th>Pemilik</th>
-                    <th className="angka">Sistem</th>
-                    <th style={{ width: 110 }}>Hitung</th>
-                    <th style={{ width: 190 }}>Alasan selisih</th>
-                    <th style={{ width: 180 }}>Catatan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stok.map((row) => (
-                    <BarisHitung
-                      key={`${row.product_id}:${row.owner_id ?? 'company'}`}
-                      row={row}
-                      tersimpan={lines.find(
-                        (l) => l.product_id === row.product_id && l.owner_id === row.owner_id,
-                      )}
-                      terkunci={terkunci}
-                      simpan={simpanBaris}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-
-          <div className="card">
-            <h3>Selisih</h3>
-            {selisih.length === 0 ? (
-              <p className="kosong">Belum ada selisih tercatat.</p>
-            ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Produk</th>
-                    <th>Pemilik</th>
-                    <th className="angka">Sistem</th>
-                    <th className="angka">Hitung</th>
-                    <th className="angka">Selisih</th>
-                    <th>Alasan</th>
-                    <th className="angka">Harga satuan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selisih.map((l) => (
-                    <tr key={l.id}>
-                      <td>{l.product_name}</td>
-                      <td>{l.owner_name ?? 'Perusahaan'}</td>
-                      <td className="angka">{l.system_qty}</td>
-                      <td className="angka">{l.counted_qty}</td>
-                      <td className="angka" style={{ color: l.variance < 0 ? 'var(--danger)' : undefined }}>
-                        {l.variance > 0 ? `+${l.variance}` : l.variance}
-                      </td>
-                      <td>{l.reason_code ?? '—'}</td>
-                      <td className="angka">
-                        {l.unit_cost_idr === null ? '—' : formatIDR(l.unit_cost_idr)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-
-            {!terkunci && (
-              <div style={{ marginTop: 16 }}>
-                <label>
-                  <span>Alasan posting *</span>
-                  <input
-                    value={alasanPosting}
-                    onChange={(e) => setAlasanPosting(e.target.value)}
-                    placeholder="mis. Opname bulanan Oktober"
-                  />
-                </label>
-                <p style={{ color: 'var(--muted)', fontSize: 14 }}>
-                  Setelah diposting, stok benar-benar bergerak dan opname ini tidak bisa diubah lagi.
-                  Koreksi berikutnya berarti hitung ulang.
-                </p>
-                <button onClick={() => void posting()} disabled={sedang || alasanPosting.trim() === ''}>
-                  {sedang ? 'Memposting…' : 'Posting penyesuaian'}
-                </button>
-              </div>
-            )}
-          </div>
-        </>
+      {konfirmasi && aktif && (
+        <Konfirmasi
+          judul="Posting penyesuaian stok"
+          gawat
+          sibuk={sedang}
+          labelJalankan="Posting, stok bergerak"
+          labelAlasan="Alasan posting"
+          petunjukAlasan="Mis. Opname bulanan Oktober"
+          tutup={() => setKonfirmasi(false)}
+          jalankan={(alasan) => void posting(alasan)}
+        >
+          <p>
+            <strong>{selisih.length} baris</strong> akan disesuaikan pada opname{' '}
+            {aktif.business_date}. Stok benar-benar bergerak, masing-masing ke bucket pemiliknya
+            sendiri.
+          </p>
+          {selisih.length > 0 && (
+            <ul>
+              {selisih.slice(0, 6).map((l) => (
+                <li key={l.id}>
+                  {l.product_name} · {l.owner_name ?? 'Perusahaan'}:{' '}
+                  <strong>
+                    {l.variance > 0 ? `+${l.variance}` : l.variance}
+                  </strong>{' '}
+                  {l.reason_code ? `(${l.reason_code})` : '(tanpa alasan)'}
+                </li>
+              ))}
+              {selisih.length > 6 && <li>…dan {selisih.length - 6} baris lain.</li>}
+            </ul>
+          )}
+          <p className="catatan">
+            Setelah diposting, opname ini tidak bisa diubah lagi. Koreksi berikutnya berarti hitung
+            ulang. Perubahan dicatat di log audit (INV-10).
+          </p>
+        </Konfirmasi>
       )}
     </>
   )
@@ -270,6 +359,7 @@ function BarisHitung({
           min={0}
           value={hitung}
           disabled={terkunci}
+          aria-label={`Hitung fisik ${row.product_name}, ${row.owner_name ?? 'Perusahaan'}`}
           onChange={(e) => setHitung(e.target.value)}
           onBlur={() => void simpan(row, hitung, kode, catatan)}
         />
@@ -278,6 +368,7 @@ function BarisHitung({
         <select
           value={kode}
           disabled={terkunci || selisih === 0}
+          aria-label={`Alasan selisih ${row.product_name}`}
           onChange={(e) => {
             setKode(e.target.value)
             void simpan(row, hitung, e.target.value, catatan)
@@ -295,6 +386,7 @@ function BarisHitung({
         <input
           value={catatan}
           disabled={terkunci}
+          aria-label={`Catatan ${row.product_name}`}
           onChange={(e) => setCatatan(e.target.value)}
           onBlur={() => void simpan(row, hitung, kode, catatan)}
         />

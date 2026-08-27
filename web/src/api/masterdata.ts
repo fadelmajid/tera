@@ -82,6 +82,25 @@ export const setupFirstEntity = (body: {
   book_year_start_month?: number
 }) => api<Entity>('/setup/entity', { method: 'POST', body })
 
+/**
+ * Adds another company. Owner only.
+ *
+ * setupFirstEntity handles exactly the first one; every company after it comes
+ * through here. The two companies are what make transfers, per-entity PKP
+ * behaviour, and the omzet clock mean anything (R1.1, R1.2).
+ */
+export const createEntity = (
+  entityId: string,
+  body: {
+    code: string
+    name: string
+    is_pkp: boolean
+    npwp?: string
+    timezone?: string
+    book_year_start_month?: number
+  },
+) => api<Entity>('/entities', { method: 'POST', entityId, body })
+
 const scoped =
   <T>(path: string) =>
   (entityId: string) =>

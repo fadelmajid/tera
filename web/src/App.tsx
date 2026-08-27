@@ -40,7 +40,21 @@ export function App() {
     if (entityId) localStorage.setItem(ENTITY_KEY, entityId)
   }, [entityId])
 
-  if (state.status === 'memuat') return <div className="masuk">Memuat…</div>
+  if (state.status === 'memuat') {
+    return (
+      <div className="masuk">
+        <div className="card" role="status" aria-busy="true">
+          <div className="merek">
+            <span className="merek-tanda" aria-hidden="true">
+              T
+            </span>
+            <h1>Tera</h1>
+          </div>
+          <p className="catatan">Menghubungi server…</p>
+        </div>
+      </div>
+    )
+  }
 
   if (state.status === 'keluar') {
     return <Masuk onMasuk={() => void muat()} />
@@ -56,7 +70,12 @@ export function App() {
     return (
       <div className="masuk">
         <div className="card">
-          <h1>Belum ada akses</h1>
+          <div className="merek">
+            <span className="merek-tanda" aria-hidden="true">
+              T
+            </span>
+            <h1>Belum ada akses</h1>
+          </div>
           <p>Akun ini belum diberi peran di perusahaan mana pun. Minta pemilik untuk memberikan akses.</p>
           <button
             className="sekunder"
@@ -78,6 +97,7 @@ export function App() {
         entities={state.entities}
         entityId={entityId}
         pilihEntity={setEntityId}
+        muatUlang={() => void muat()}
         onKeluar={() => {
           void logout()
             .catch(() => undefined)

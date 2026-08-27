@@ -44,8 +44,13 @@ export function Setup({ selesai }: { selesai: (entity: Entity) => void }) {
 
   return (
     <div className="masuk">
-      <form className="card" onSubmit={simpan} style={{ maxWidth: 460 }}>
-        <h1>Siapkan perusahaan</h1>
+      <form className="card siapkan" onSubmit={simpan}>
+        <div className="merek">
+          <span className="merek-tanda" aria-hidden="true">
+            T
+          </span>
+          <h1>Siapkan perusahaan</h1>
+        </div>
         <p className="sub">
           Perusahaan pertama. Anda otomatis menjadi pemiliknya dan dapat menambahkan pengguna
           lain setelah ini.

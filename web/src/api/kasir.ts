@@ -19,7 +19,11 @@ export interface Sale {
   faktur_no: string | null
   gross_idr: IDR
   discount_idr: IDR
+  /** The taxable base. dpp_idr + ppn_idr = total_idr, exactly (SPEC §2.2). */
+  dpp_idr: IDR
   ppn_idr: IDR
+  /** Whether the prices already contained the PPN, as the rule said that day. */
+  ppn_inclusive: boolean
   total_idr: IDR
   cogs_idr: IDR
   is_credit: boolean

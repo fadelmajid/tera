@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { login } from '../api/auth'
 import type { Session } from '../api/auth'
 import { ApiError } from '../api/client'
+import { Galat } from '../components/dasar'
 
 /** The login screen. */
 export function Masuk({ onMasuk }: { onMasuk: (session: Session) => void }) {
@@ -28,10 +29,15 @@ export function Masuk({ onMasuk }: { onMasuk: (session: Session) => void }) {
   return (
     <div className="masuk">
       <form className="card" onSubmit={kirim}>
-        <h1>Tera</h1>
+        <div className="merek">
+          <span className="merek-tanda" aria-hidden="true">
+            T
+          </span>
+          <h1>Tera</h1>
+        </div>
         <p className="sub">Sistem persediaan dan penjualan</p>
 
-        {galat && <div className="galat">{galat}</div>}
+        <Galat pesan={galat} />
 
         <label>
           <span>Nama pengguna</span>

@@ -22,6 +22,11 @@ interface Item {
   discount: IDR
 }
 
+interface Struk {
+  hasil: SaleResult
+  teks: string
+}
+
 /**
  * Kasir — the till (TASKS 2.3, 2.4, R9).
  *
@@ -32,6 +37,18 @@ interface Item {
  * presses Enter, which is indistinguishable from a person typing fast — so the
  * search box stays focused and an exact code match adds the item straight to
  * the cart rather than showing a list of one.
+ *
+ * # The till never leaves the screen
+ *
+ * Two states used to replace the whole page: the receipt after a sale, and the
+ * "open a session" form before the first one. Both meant that a cashier
+ * arriving in the morning, or finishing any transaction, was looking at a
+ * screen that did not resemble the till they were trained on — and getting
+ * back cost a click and a full re-orientation, several hundred times a day.
+ *
+ * Now both are panels in the right-hand column. The receipt appears above a
+ * cart that is already empty and already focused, so the next barcode scan
+ * simply works and the receipt slides out of the way when it is scrolled past.
  */
 export function KasirPage({ entityId, isPKP }: { entityId: string; isPKP: boolean }) {
   const [produk, setProduk] = useState<Product[]>([])
@@ -52,17 +69,24 @@ export function KasirPage({ entityId, isPKP }: { entityId: string; isPKP: boolea
   const [tempo, setTempo] = useState('')
   const [fakturDiterbitkan, setFakturDiterbitkan] = useState(false)
   const [sedang, setSedang] = useState(false)
-  const [struk, setStruk] = useState<{ hasil: SaleResult; teks: string } | null>(null)
+  const [struk, setStruk] = useState<Struk | null>(null)
 
   const cariRef = useRef<HTMLInputElement>(null)
   const [modalAwal, setModalAwal] = useState('')
+  const [membuka, setMembuka] = useState(false)
 
   const muat = useCallback(async () => {
     try {
-      setProduk(await listProducts(entityId))
-      setOwners(await listOwners(entityId))
-      setPelanggan(await listCustomers(entityId))
-      setSesi(await currentSession(entityId))
+      const [p, o, c, s] = await Promise.all([
+        listProducts(entityId),
+        listOwners(entityId),
+        listCustomers(entityId),
+        currentSession(entityId),
+      ])
+      setProduk(p)
+      setOwners(o)
+      setPelanggan(c)
+      setSesi(s)
       setGalat(null)
     } catch (err) {
       setGalat(err instanceof ApiError ? err.message : 'Gagal memuat data')
@@ -73,11 +97,9 @@ export function KasirPage({ entityId, isPKP }: { entityId: string; isPKP: boolea
     void muat()
   }, [muat])
 
-  // The scanner is a keyboard. Keeping focus here means a scan lands in the
-  // search box wherever the cashier last clicked.
   useEffect(() => {
-    cariRef.current?.focus()
-  }, [keranjang.length, struk])
+    if (sesi) cariRef.current?.focus()
+  }, [keranjang.length, struk, sesi])
 
   const kategoriList = useMemo(
     () => [...new Set(produk.map((p) => p.category).filter((c): c is string => !!c))].sort(),
@@ -109,6 +131,7 @@ export function KasirPage({ entityId, isPKP }: { entityId: string; isPKP: boolea
       return [...rows, { product: p, qty: 1, unitPrice: p.sale_price_idr, discount: ZERO }]
     })
     setCari('')
+    setGalat(null)
   }
 
   /** R9.3: the wedge types the code then presses Enter. */
@@ -155,13 +178,32 @@ export function KasirPage({ entityId, isPKP }: { entityId: string; isPKP: boolea
   const kembali = dibayarIdr > total ? sub(dibayarIdr, total) : ZERO
   const kurang = total > dibayarIdr ? sub(total, dibayarIdr) : ZERO
 
+  /* A cash sale that does not cover the total is not a cash sale. The screen
+     used to show "Kurang Rp x" in red and leave the button enabled, so the
+     only thing standing between a short payment and the books was the
+     cashier noticing the colour. A part payment is a credit sale; that path
+     is one checkbox away and records a piutang against a named customer. */
+  const kurangBayar = !kredit && kurang > 0
+  const kreditTanpaPelanggan = kredit && customerId === ''
+  const bisaBayar =
+    !sedang &&
+    keranjang.length > 0 &&
+    !diskonSalah &&
+    !bayarSalah &&
+    !kurangBayar &&
+    !kreditTanpaPelanggan
+
   async function bukaSesi() {
+    setMembuka(true)
     try {
       const s = await openSession(entityId, modalAwal.trim() === '' ? ZERO : parseIDR(modalAwal))
       setSesi(s)
+      setModalAwal('')
       setGalat(null)
     } catch (err) {
       setGalat(err instanceof ApiError ? err.message : 'Gagal membuka sesi kas')
+    } finally {
+      setMembuka(false)
     }
   }
 
@@ -185,7 +227,7 @@ export function KasirPage({ entityId, isPKP }: { entityId: string; isPKP: boolea
           : [{ method: metode, amount_idr: dibayarIdr, reference: referensi }],
       })
 
-      const preview = await receiptPreview(entityId, hasil.sale.id)
+      const preview = await receiptPreview(entityId, hasil.sale.id).catch(() => ({ text: '' }))
       setStruk({ hasil, teks: preview.text })
 
       setKeranjang([])
@@ -194,6 +236,7 @@ export function KasirPage({ entityId, isPKP }: { entityId: string; isPKP: boolea
       setReferensi('')
       setKredit(false)
       setCustomerId('')
+      setTempo('')
       setFakturDiterbitkan(false)
       setGalat(null)
     } catch (err) {
@@ -203,104 +246,41 @@ export function KasirPage({ entityId, isPKP }: { entityId: string; isPKP: boolea
     }
   }
 
-  if (!sesi) {
-    return (
-      <>
-        <h2>Kasir</h2>
-        <Galat pesan={galat} />
-        <div className="card">
-          <h3>Buka sesi kas</h3>
-          <p style={{ color: 'var(--muted)' }}>
-            Penjualan dicatat dalam satu sesi kas supaya bisa dicocokkan di akhir hari. Selama sesi
-            masih terbuka, penjualan yang salah bisa dibatalkan; setelah ditutup, koreksinya lewat
-            retur.
-          </p>
-          <Teks
-            label="Modal awal laci"
-            nilai={modalAwal}
-            ubah={setModalAwal}
-            petunjuk="Rupiah bulat, mis. 500.000"
-          />
-          <button onClick={() => void bukaSesi()}>Buka sesi</button>
-        </div>
-      </>
-    )
-  }
-
-  if (struk) {
-    return (
-      <>
-        <h2>Penjualan tersimpan</h2>
-        <Galat pesan={galat} />
-        <div className="card">
-          <p>
-            Nota <strong>{struk.hasil.sale.invoice_no}</strong> — total{' '}
-            <strong>{formatIDR(struk.hasil.sale.total_idr)}</strong>
-          </p>
-          {struk.hasil.receivable && (
-            <p>
-              Piutang tercatat <strong>{formatIDR(struk.hasil.receivable.amount_idr)}</strong>
-              {struk.hasil.receivable.due_date ? `, jatuh tempo ${struk.hasil.receivable.due_date}` : ''}.
-            </p>
-          )}
-          {!struk.hasil.printed && (
-            <p style={{ color: 'var(--muted)' }}>
-              {struk.hasil.print_error
-                ? `Struk gagal dicetak: ${struk.hasil.print_error}. Penjualan tetap tersimpan.`
-                : 'Printer belum dikonfigurasi. Penjualan tetap tersimpan.'}
-            </p>
-          )}
-          <pre
-            style={{
-              background: 'var(--bg)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)',
-              padding: 12,
-              fontSize: 13,
-              overflowX: 'auto',
-            }}
-          >
-            {struk.teks}
-          </pre>
-          <p>
-            <button
-              onClick={() => {
-                void printReceipt(entityId, struk.hasil.sale.id).catch((err: unknown) =>
-                  setGalat(err instanceof ApiError ? err.message : 'Gagal mencetak'),
-                )
-              }}
-            >
-              Cetak ulang
-            </button>{' '}
-            <button className="sekunder" onClick={() => setStruk(null)}>
-              Penjualan berikutnya
-            </button>
-          </p>
-        </div>
-      </>
-    )
-  }
-
   return (
     <>
-      <h2>Kasir</h2>
+      <div className="card-kepala">
+        <h2>Kasir</h2>
+        {sesi ? (
+          <span className="lencana lencana-aman">Sesi kas terbuka · {sesi.business_date}</span>
+        ) : (
+          <span className="lencana lencana-hati">Sesi kas tertutup</span>
+        )}
+      </div>
+
       <Galat pesan={galat} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 3fr) minmax(320px, 2fr)', gap: 16 }}>
+      <div className="kasir">
         <div className="card">
-          <input
-            ref={cariRef}
-            value={cari}
-            onChange={(e) => setCari(e.target.value)}
-            onKeyDown={onCariKey}
-            placeholder="Scan barcode atau cari produk…"
-            style={{ fontSize: 18, padding: 12 }}
-          />
+          <label>
+            <span>Scan atau cari produk</span>
+            <input
+              ref={cariRef}
+              className="kasir-cari"
+              value={cari}
+              onChange={(e) => setCari(e.target.value)}
+              onKeyDown={onCariKey}
+              placeholder="Scan barcode atau ketik nama produk…"
+              disabled={!sesi}
+              aria-describedby="kasir-hitung"
+            />
+          </label>
 
           {kategoriList.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '10px 0' }}>
+            <div className="chip-baris" role="group" aria-label="Saring kategori">
               <button
-                className={kategori === '' ? undefined : 'sekunder'}
+                type="button"
+                className="chip"
+                aria-pressed={kategori === ''}
                 onClick={() => setKategori('')}
               >
                 Semua
@@ -308,7 +288,9 @@ export function KasirPage({ entityId, isPKP }: { entityId: string; isPKP: boolea
               {kategoriList.map((k) => (
                 <button
                   key={k}
-                  className={kategori === k ? undefined : 'sekunder'}
+                  type="button"
+                  className="chip"
+                  aria-pressed={kategori === k}
                   onClick={() => setKategori(k)}
                 >
                   {k}
@@ -317,168 +299,322 @@ export function KasirPage({ entityId, isPKP }: { entityId: string; isPKP: boolea
             </div>
           )}
 
-          {/* A grid is fine at 100-1,000 SKUs (R9.2). */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-              gap: 8,
-              maxHeight: 420,
-              overflowY: 'auto',
-            }}
-          >
+          <p className="catatan" id="kasir-hitung">
+            {terlihat.length} produk ditampilkan
+          </p>
+
+          <div className="kasir-rak">
             {terlihat.map((p) => (
               <button
                 key={p.id}
-                className="sekunder"
+                type="button"
+                className="ubin"
                 onClick={() => tambah(p)}
-                style={{ textAlign: 'left', padding: 10, height: 'auto' }}
+                disabled={!sesi}
               >
-                <div style={{ fontWeight: 600 }}>{p.name}</div>
-                <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+                <span className="ubin-nama">{p.name}</span>
+                <span className="ubin-ket">
                   {formatIDR(p.sale_price_idr)} · {namaOwner(p.owner_id)}
-                </div>
+                </span>
               </button>
             ))}
-            {terlihat.length === 0 && <p className="kosong">Tidak ada produk.</p>}
           </div>
+          {terlihat.length === 0 && <p className="kosong">Tidak ada produk yang cocok.</p>}
         </div>
 
-        <div className="card">
-          <h3 style={{ marginTop: 0 }}>Keranjang</h3>
-          {keranjang.length === 0 ? (
-            <p className="kosong">Kosong. Scan atau pilih produk.</p>
-          ) : (
-            <table>
-              <tbody>
-                {keranjang.map((i, n) => (
-                  <tr key={i.product.id}>
-                    <td>
-                      {i.product.name}
-                      <br />
-                      <small style={{ color: 'var(--muted)' }}>
-                        {formatIDR(i.unitPrice)} · {namaOwner(i.product.owner_id)}
-                      </small>
-                    </td>
-                    <td style={{ width: 70 }}>
-                      <input
-                        type="number"
-                        min={1}
-                        value={i.qty}
-                        onChange={(e) =>
-                          setKeranjang((rows) =>
-                            rows.map((r, x) =>
-                              x === n ? { ...r, qty: Math.max(1, Number(e.target.value) || 1) } : r,
-                            ),
-                          )
-                        }
-                      />
-                    </td>
-                    <td className="angka">{formatIDR(mulQty(i.unitPrice, i.qty))}</td>
-                    <td style={{ width: 36 }}>
-                      <button
-                        className="sekunder"
-                        onClick={() => setKeranjang((rows) => rows.filter((_, x) => x !== n))}
-                      >
-                        ×
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="kasir-samping">
+          {!sesi && (
+            <div className="card">
+              <h3>Buka sesi kas</h3>
+              <p className="catatan">
+                Penjualan dicatat dalam satu sesi kas supaya bisa dicocokkan di akhir hari. Selama
+                sesi masih terbuka, penjualan yang salah bisa dibatalkan; setelah ditutup,
+                koreksinya lewat retur.
+              </p>
+              <Teks
+                label="Modal awal laci"
+                nilai={modalAwal}
+                ubah={setModalAwal}
+                petunjuk="Rupiah bulat, mis. 500.000. Kosongkan jika laci mulai kosong."
+              />
+              <button onClick={() => void bukaSesi()} disabled={membuka}>
+                {membuka ? 'Membuka…' : 'Buka sesi'}
+              </button>
+            </div>
           )}
 
-          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: 10 }}>
-            <Teks label="Diskon nota" nilai={diskonNota} ubah={setDiskonNota} petunjuk="Rupiah bulat" />
-            <p style={{ fontSize: 22, margin: '10px 0' }}>
-              Total <strong className="angka">{formatIDR(total)}</strong>
-            </p>
+          {struk && (
+            <StrukPanel
+              struk={struk}
+              entityId={entityId}
+              tutup={() => setStruk(null)}
+              lapor={setGalat}
+            />
+          )}
 
-            {!kredit && (
-              <>
-                <label>
-                  <span>Metode bayar</span>
-                  <select value={metode} onChange={(e) => setMetode(e.target.value)}>
-                    {METODE_BAYAR.map(([nilai, label]) => (
-                      <option key={nilai} value={nilai}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <Teks label="Dibayar" nilai={dibayar} ubah={setDibayar} petunjuk="Kosong = pas" />
-                {metode !== 'TUNAI' && (
-                  <Teks
-                    label="Referensi"
-                    nilai={referensi}
-                    ubah={setReferensi}
-                    petunjuk="No. transaksi transfer/QRIS — dicatat, bukan diproses"
-                  />
-                )}
-                {kembali > 0 && (
-                  <p>
-                    Kembali <strong className="angka">{formatIDR(kembali)}</strong>
-                  </p>
-                )}
-                {kurang > 0 && (
-                  <p style={{ color: 'var(--danger)' }}>
-                    Kurang <strong className="angka">{formatIDR(kurang)}</strong>
-                  </p>
-                )}
-              </>
-            )}
+          {sesi && (
+            <div className="card">
+              <h3>Keranjang</h3>
+              {keranjang.length === 0 ? (
+                <p className="kosong">Kosong. Scan atau pilih produk.</p>
+              ) : (
+                <div className="tabel-gulir">
+                  <table>
+                    <caption className="mikro">
+                      {keranjang.length} baris
+                    </caption>
+                    <tbody>
+                      {keranjang.map((i, n) => (
+                        <tr key={i.product.id}>
+                          <td>
+                            {i.product.name}
+                            <br />
+                            <small className="catatan">
+                              {formatIDR(i.unitPrice)} · {namaOwner(i.product.owner_id)}
+                            </small>
+                          </td>
+                          <td style={{ width: 74 }}>
+                            <input
+                              type="number"
+                              min={1}
+                              value={i.qty}
+                              aria-label={`Jumlah ${i.product.name}`}
+                              onChange={(e) =>
+                                setKeranjang((rows) =>
+                                  rows.map((r, x) =>
+                                    x === n
+                                      ? { ...r, qty: Math.max(1, Number(e.target.value) || 1) }
+                                      : r,
+                                  ),
+                                )
+                              }
+                            />
+                          </td>
+                          <td className="angka">{formatIDR(mulQty(i.unitPrice, i.qty))}</td>
+                          <td style={{ width: 40 }}>
+                            <button
+                              type="button"
+                              className="sekunder ikon-saja"
+                              aria-label={`Hapus ${i.product.name} dari keranjang`}
+                              onClick={() =>
+                                setKeranjang((rows) => rows.filter((_, x) => x !== n))
+                              }
+                            >
+                              ×
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input type="checkbox" checked={kredit} onChange={(e) => setKredit(e.target.checked)} />
-              <span style={{ margin: 0 }}>Penjualan kredit (piutang)</span>
-            </label>
+              <Teks
+                label="Diskon nota"
+                nilai={diskonNota}
+                ubah={setDiskonNota}
+                petunjuk="Rupiah bulat"
+                inputMode="numeric"
+              />
 
-            {kredit && (
-              <>
-                <label>
-                  <span>Pelanggan *</span>
-                  <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} required>
-                    <option value="">Pilih pelanggan</option>
-                    {pelanggan.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <Teks label="Jatuh tempo" nilai={tempo} ubah={setTempo} tipe="date" />
-              </>
-            )}
+              <div className="kasir-total">
+                <span className="label">Total</span>
+                <span className="nilai">{formatIDR(total)}</span>
+              </div>
 
-            {isPKP && (
-              <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 8 }}>
+              <label className="centang">
                 <input
                   type="checkbox"
-                  checked={fakturDiterbitkan}
-                  onChange={(e) => setFakturDiterbitkan(e.target.checked)}
+                  checked={kredit}
+                  onChange={(e) => setKredit(e.target.checked)}
                 />
-                <span style={{ margin: 0 }}>
-                  Faktur pajak diterbitkan
-                  <br />
-                  <small style={{ color: 'var(--muted)' }}>
-                    Dicatat terpisah dari PPN. PPN keluaran tetap terutang walaupun pembeli tidak
-                    minta faktur.
+                <span>
+                  Penjualan kredit (piutang)
+                  <small className="petunjuk">
+                    Barang keluar sekarang, uangnya ditagih nanti. Wajib atas nama pelanggan.
                   </small>
                 </span>
               </label>
-            )}
 
-            <button
-              onClick={() => void bayar()}
-              disabled={sedang || keranjang.length === 0 || diskonSalah || bayarSalah}
-              style={{ width: '100%', fontSize: 18, padding: 14, marginTop: 12 }}
-            >
-              {sedang ? 'Menyimpan…' : 'Bayar'}
-            </button>
-          </div>
+              {kredit ? (
+                <>
+                  <label>
+                    <span>Pelanggan *</span>
+                    <select
+                      value={customerId}
+                      onChange={(e) => setCustomerId(e.target.value)}
+                      required
+                    >
+                      <option value="">Pilih pelanggan</option>
+                      {pelanggan.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                    {kreditTanpaPelanggan && (
+                      <small className="petunjuk">
+                        Piutang harus punya nama. Tambahkan pelanggan lebih dulu bila belum ada.
+                      </small>
+                    )}
+                  </label>
+                  <Teks label="Jatuh tempo" nilai={tempo} ubah={setTempo} tipe="date" />
+                </>
+              ) : (
+                <>
+                  <label>
+                    <span>Metode bayar</span>
+                    <select value={metode} onChange={(e) => setMetode(e.target.value)}>
+                      {METODE_BAYAR.map(([nilai, label]) => (
+                        <option key={nilai} value={nilai}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <Teks
+                    label="Dibayar"
+                    nilai={dibayar}
+                    ubah={setDibayar}
+                    petunjuk="Kosongkan bila uangnya pas"
+                    inputMode="numeric"
+                  />
+                  {metode !== 'TUNAI' && (
+                    <Teks
+                      label="Referensi"
+                      nilai={referensi}
+                      ubah={setReferensi}
+                      petunjuk="No. transaksi transfer/QRIS — dicatat, bukan diproses"
+                    />
+                  )}
+                  {kembali > 0 && (
+                    <p>
+                      Kembali <strong className="angka-kiri">{formatIDR(kembali)}</strong>
+                    </p>
+                  )}
+                  {kurangBayar && (
+                    <div className="galat" role="alert">
+                      Kurang <strong className="angka-kiri">{formatIDR(kurang)}</strong>. Terima
+                      uangnya penuh, atau centang penjualan kredit supaya sisanya tercatat sebagai
+                      piutang atas nama pelanggan.
+                    </div>
+                  )}
+                </>
+              )}
+
+              {isPKP && (
+                <label className="centang">
+                  <input
+                    type="checkbox"
+                    checked={fakturDiterbitkan}
+                    onChange={(e) => setFakturDiterbitkan(e.target.checked)}
+                  />
+                  <span>
+                    Faktur pajak diterbitkan
+                    <small className="petunjuk">
+                      Dicatat terpisah dari PPN. PPN keluaran tetap terutang walaupun pembeli tidak
+                      minta faktur.
+                    </small>
+                  </span>
+                </label>
+              )}
+
+              <button className="bayar" onClick={() => void bayar()} disabled={!bisaBayar}>
+                {sedang ? 'Menyimpan…' : `Bayar ${formatIDR(total)}`}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </>
+  )
+}
+
+/**
+ * The receipt for the sale just rung.
+ *
+ * A panel above the cart rather than a page. The cashier does not have to
+ * dismiss it before serving the next customer — scanning simply fills the cart
+ * underneath it — but it stays until it is dismissed, so a printer failure is
+ * not something that scrolls away unnoticed.
+ */
+function StrukPanel({
+  struk,
+  entityId,
+  tutup,
+  lapor,
+}: {
+  struk: Struk
+  entityId: string
+  tutup: () => void
+  lapor: (pesan: string | null) => void
+}) {
+  const { sale } = struk.hasil
+  const [mencetak, setMencetak] = useState(false)
+
+  const cetak = () => {
+    setMencetak(true)
+    printReceipt(entityId, sale.id)
+      .then(() => lapor(null))
+      .catch((err: unknown) =>
+        lapor(err instanceof ApiError ? err.message : 'Gagal mencetak'),
+      )
+      .finally(() => setMencetak(false))
+  }
+
+  return (
+    <div className="card">
+      <div className="card-kepala">
+        <h3>Tersimpan — {sale.invoice_no}</h3>
+        <button type="button" className="sekunder ikon-saja" onClick={tutup} aria-label="Tutup struk">
+          ×
+        </button>
+      </div>
+
+      <div className="berhasil" role="status">
+        Total <strong className="angka-kiri">{formatIDR(sale.total_idr)}</strong>
+        {sale.ppn_idr !== 0 && (
+          <>
+            {' '}
+            — {sale.ppn_inclusive ? 'termasuk' : 'ditambah'} PPN{' '}
+            <strong className="angka-kiri">{formatIDR(sale.ppn_idr)}</strong> atas DPP{' '}
+            <strong className="angka-kiri">{formatIDR(sale.dpp_idr)}</strong>
+            {!sale.faktur_issued && ' — tanpa faktur, PPN tetap terutang'}
+          </>
+        )}
+        .
+      </div>
+
+      {struk.hasil.receivable && (
+        <p className="catatan">
+          Piutang tercatat{' '}
+          <strong className="angka-kiri">{formatIDR(struk.hasil.receivable.amount_idr)}</strong>
+          {struk.hasil.receivable.due_date
+            ? `, jatuh tempo ${struk.hasil.receivable.due_date}`
+            : ', tanpa jatuh tempo — umurnya tidak bisa dihitung di laporan piutang'}
+          .
+        </p>
+      )}
+
+      {!struk.hasil.printed && (
+        <div className="disclaimer">
+          {struk.hasil.print_error
+            ? `Struk gagal dicetak: ${struk.hasil.print_error}. Penjualan tetap tersimpan.`
+            : 'Printer belum dikonfigurasi. Penjualan tetap tersimpan.'}
+        </div>
+      )}
+
+      {struk.teks && <pre className="struk">{struk.teks}</pre>}
+
+      <div className="aksi">
+        <button className="sekunder" onClick={cetak} disabled={mencetak}>
+          {mencetak ? 'Mencetak…' : 'Cetak ulang'}
+        </button>
+        <button className="sekunder" onClick={tutup}>
+          Tutup
+        </button>
+      </div>
+    </div>
   )
 }

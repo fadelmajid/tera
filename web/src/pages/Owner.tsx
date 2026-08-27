@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { listOwners, createOwner } from '../api/masterdata'
 import type { Owner } from '../api/masterdata'
 import { ApiError } from '../api/client'
-import { useDaftar, Halaman, Teks } from '../components/dasar'
+import { useDaftar, Halaman, Teks, Tabel } from '../components/dasar'
 
 /**
  * Owners — the family members products are attributed to.
@@ -10,6 +10,9 @@ import { useDaftar, Halaman, Teks } from '../components/dasar'
  * This list is what makes the owner-margin report possible. The user currently
  * fakes it with product categories because there is no proper slot for it
  * (REQUIREMENTS §2); this is that slot.
+ *
+ * First in the master-data menu, and second in the setup checklist, because a
+ * product cannot be attributed to an owner who does not exist yet.
  */
 export function OwnerPage({ entityId }: { entityId: string }) {
   const { data, galat, muatUlang, setGalat } = useDaftar<Owner>(() => listOwners(entityId), [entityId])
@@ -39,10 +42,13 @@ export function OwnerPage({ entityId }: { entityId: string }) {
       judul="Owner"
       keterangan="Anggota keluarga yang memiliki lini produk. Margin dihitung dan disetorkan per owner."
       galat={galat}
+      labelTambah="Tambah owner"
       form={
         <form onSubmit={simpan}>
-          <Teks label="Kode" nilai={kode} ubah={setKode} wajib />
-          <Teks label="Nama" nilai={nama} ubah={setNama} wajib />
+          <div className="baris">
+            <Teks label="Kode" nilai={kode} ubah={setKode} wajib />
+            <Teks label="Nama" nilai={nama} ubah={setNama} wajib />
+          </div>
           <Teks label="Catatan" nilai={catatan} ubah={setCatatan} />
           <button type="submit" disabled={sedang}>
             {sedang ? 'Menyimpan…' : 'Tambah owner'}
@@ -53,7 +59,7 @@ export function OwnerPage({ entityId }: { entityId: string }) {
       {data.length === 0 ? (
         <p className="kosong">Belum ada owner. Tambahkan anggota keluarga yang memiliki produk.</p>
       ) : (
-        <table>
+        <Tabel label="Daftar owner">
           <thead>
             <tr>
               <th>Kode</th>
@@ -72,7 +78,7 @@ export function OwnerPage({ entityId }: { entityId: string }) {
               </tr>
             ))}
           </tbody>
-        </table>
+        </Tabel>
       )}
     </Halaman>
   )
