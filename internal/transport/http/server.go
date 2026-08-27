@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net"
 	stdhttp "net/http"
+	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -54,7 +56,29 @@ type Config struct {
 	// Printing is optional. A shop with no printer configured must still be
 	// able to trade, so every path through it degrades to a preview.
 	Printing *service.Printing
-	Logger   *slog.Logger
+	// Margin is Laporan Margin per Owner — the report the family settles money
+	// on (R2.4). Owners and managers only (D-009).
+	Margin *service.Margin
+	// Transfers moves stock between the two companies (SPEC §3.4). The flow
+	// Olsera gets wrong, and the one that can destroy input PPN credit (R4.5).
+	Transfers *service.Transfers
+	// Tax is the effective-dated rule configuration and the PPN position
+	// (SPEC §2.1, §2.4). Reading the position needs manager or above; changing
+	// a rule is owner only, because it decides what every subsequent sale
+	// charges.
+	Tax *service.Tax
+	// Export is the whole database as an open-format archive (R14.3). Owner in
+	// every active company, because the archive is not entity-scoped and
+	// cannot be.
+	Export *service.Export
+	// Reports is the ordinary reporting surface (TASKS 6.1–6.5). Manager or
+	// above: every one of them carries a cost figure.
+	Reports *service.Reports
+	// Omzet is turnover against the Rp 4,8 miliar PKP threshold (SPEC §5). The
+	// book-year figure is the law and the trailing one is an estimate, and the
+	// payload labels each so no client can present one as the other.
+	Omzet  *service.Omzet
+	Logger *slog.Logger
 
 	// CookieSecure marks the session cookie Secure. Off by default: the shop
 	// LAN is plain HTTP with no certificate authority, and a Secure cookie
@@ -133,6 +157,12 @@ func Handler(cfg Config) stdhttp.Handler {
 			mountMasterData(r, cfg)
 			mountPurchasing(r, cfg)
 			mountSales(r, cfg)
+			mountMargin(r, cfg)
+			mountTransfers(r, cfg)
+			mountTax(r, cfg)
+			mountExport(r, cfg)
+			mountReports(r, cfg)
+			mountOmzet(r, cfg)
 		}
 	})
 
@@ -195,10 +225,52 @@ func (s *Server) logReachableAt(bound string) {
 
 	s.log.Info("tera siap", "alamat", strings.Join(urls, "  "))
 
+	// R8.6, TASKS 8.3: the address staff should actually bookmark.
+	//
+	// An IP address handed out by the router is a bookmark with an expiry date
+	// nobody is told about — the lease is renewed until one day it is not, and
+	// every device in the shop breaks at once with no error message that says
+	// why. The .local name does not move.
+	//
+	// No mDNS responder is shipped for it, deliberately. macOS and most Linux
+	// desktops already run one for their own hostname, and Windows has resolved
+	// .local natively since Windows 10; a second responder in this process
+	// would advertise a service rather than a hostname, which is not what makes
+	// tera.local resolve and would not fix anything. What is needed here is a
+	// hostname set once on the shop machine — see docs/NETWORK.md.
+	if host, err := os.Hostname(); err == nil && host != "" {
+		name := strings.TrimSuffix(strings.ToLower(host), ".local")
+		s.log.Info("alamat tetap yang sebaiknya di-bookmark",
+			"url", "http://"+name+".local:"+port,
+			"catatan", "alamat IP bisa berubah saat router membagi ulang; nama ini tidak")
+	}
+
 	if isLoopback(s.srv.Addr) {
 		s.log.Warn("server terikat ke localhost — perangkat lain di jaringan toko tidak dapat mengakses",
 			"addr", s.srv.Addr, "expected", DefaultAddr)
 	}
+}
+
+// LANAddresses is the machine's non-loopback IPv4 addresses, for a caller that
+// wants to notice when they change (R8.6).
+func LANAddresses() []string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil
+	}
+
+	out := make([]string, 0, len(addrs))
+	for _, a := range addrs {
+		ipnet, ok := a.(*net.IPNet)
+		if !ok || ipnet.IP.IsLoopback() {
+			continue
+		}
+		if ip4 := ipnet.IP.To4(); ip4 != nil {
+			out = append(out, ip4.String())
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // lanURLs enumerates non-loopback IPv4 addresses on this machine.

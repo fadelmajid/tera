@@ -202,6 +202,43 @@ func handleListEntities(md *service.MasterData) stdhttp.HandlerFunc {
 // entity-scoped route will admit them. This route resolves it once and then
 // closes: it refuses as soon as a company exists, after which creating another
 // requires being an owner of one already.
+// handleCreateEntity adds a second company.
+//
+// Found missing while building Phase 4: handleSetupFirstEntity refuses once one
+// company exists and tells the user to "minta pemilik untuk menambahkan
+// perusahaan lain", which was a route that did not exist. Every inter-company
+// feature needs two companies (R1.1, R1.2) and the user has exactly two, so
+// without this the transfer screen has nowhere to send anything.
+//
+// The creator is granted owner in the new company, for the same reason setup
+// does it: a company nobody can reach is not a company, and the person who
+// created it is the only candidate the system knows about.
+func handleCreateEntity(md *service.MasterData, auth *service.Auth) stdhttp.HandlerFunc {
+	return func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		p, ok := PrincipalFrom(r.Context())
+		if !ok {
+			writeJSON(w, stdhttp.StatusUnauthorized, map[string]any{"error": "silakan masuk terlebih dahulu"})
+			return
+		}
+
+		var req entityRequest
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+
+		entity, err := md.CreateEntity(r.Context(), actorFrom(r), req.toInput())
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		if err := auth.GrantRole(r.Context(), p.UserID, entity.ID, service.RoleOwner); err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, stdhttp.StatusCreated, toEntityDTO(entity))
+	}
+}
+
 func handleSetupFirstEntity(md *service.MasterData, auth *service.Auth) stdhttp.HandlerFunc {
 	return func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 		p, ok := PrincipalFrom(r.Context())
@@ -301,6 +338,42 @@ func writeServiceError(w stdhttp.ResponseWriter, err error) {
 	// INV-8 reaching the wire. Never a fallback to another owner's stock, and
 	// never a 500 that reads like a bug: the message says whose stock is short.
 	case errors.Is(err, service.ErrInsufficientStock):
+		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
+	// The margin report refusing to compute rather than printing a figure it
+	// cannot justify (D-011). 409 for the same reason as the two above: the
+	// request is fine, the books are not, and the message names the sale and
+	// product to look at.
+	case errors.Is(err, service.ErrReportIntegrity):
+		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
+	// The state of the till and of a finalised sale (R12.3). Every one of these
+	// already says in Indonesian what the cashier should do instead — open a
+	// session, use a return rather than a void — and falling through to a 500
+	// would replace all of that with "kesalahan internal" at the moment someone
+	// has a customer in front of them.
+	case errors.Is(err, service.ErrNoOpenSession),
+		errors.Is(err, service.ErrSessionClosed),
+		errors.Is(err, service.ErrVoidWindowClosed),
+		errors.Is(err, service.ErrVoidAfterReturn),
+		errors.Is(err, service.ErrAlreadyVoid):
+		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
+	// R4.5's blocking confirmation, refusing the write. The message is the
+	// entire feature — it says the input PPN credit on this stock is destroyed
+	// permanently and the transfer has not happened — so it must reach the
+	// person, not be swallowed by a 500.
+	case errors.Is(err, service.ErrCreditLossNotAcknowledged):
+		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
+	case errors.Is(err, service.ErrSameEntity):
+		writeJSON(w, stdhttp.StatusBadRequest, map[string]any{"error": err.Error()})
+	// The tax engine refusing to price a sale (TASKS 5.4, 5.5). This is the one
+	// that most needs to reach a person: the till has stopped because a PKP
+	// company has no PPN rule in force, or because a company marked non-PKP
+	// holds one that is. Both are somebody forgetting to configure something,
+	// both are fixed in a minute on the tax settings screen, and the message
+	// says which. Collapsed into "kesalahan internal" it is instead a cashier
+	// with a customer in front of them and nothing to go on.
+	case errors.Is(err, service.ErrTaxConfig):
+		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
+	case errors.Is(err, service.ErrRuleInForce), errors.Is(err, service.ErrRuleClosed):
 		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
 	default:
 		writeJSON(w, stdhttp.StatusInternalServerError, map[string]any{"error": "kesalahan internal"})

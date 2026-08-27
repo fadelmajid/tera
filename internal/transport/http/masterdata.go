@@ -119,6 +119,16 @@ func mountMasterData(r chi.Router, cfg Config) {
 		r.Post("/setup/entity", handleSetupFirstEntity(md, auth))
 	})
 
+	// Adding a company is an owner's decision, gated on the company they are
+	// currently working in. It is at least as consequential as granting a role,
+	// and it is what makes every inter-company feature possible (R1.1).
+	r.Group(func(r chi.Router) {
+		r.Use(requireEntityRole(service.Role.CanManageUsers,
+			"hanya pemilik yang dapat menambahkan perusahaan"))
+
+		r.Post("/entities", handleCreateEntity(md, auth))
+	})
+
 	// Everything else is scoped to a company and gated on the role held there.
 	r.Group(func(r chi.Router) {
 		r.Use(requireEntityRole(service.Role.CanManageMasterData,

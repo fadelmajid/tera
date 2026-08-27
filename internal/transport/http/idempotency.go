@@ -17,10 +17,32 @@ import (
 const ClientRequestHeader = "X-Client-Request-Id"
 
 const (
-	maxRequestBody  = 1 << 20 // 1 MiB
-	maxStoredBody   = 256 << 10
-	idempotencySkip = "/api/v1/auth/"
+	maxRequestBody = 1 << 20 // 1 MiB
+	maxStoredBody  = 256 << 10
 )
+
+// idempotencySkip lists path prefixes that carry no idempotency key.
+//
+// Auth routes, because logging in is not a business mutation and its effect is
+// a Set-Cookie header a replayed body could not reproduce.
+//
+// Previews, because they write nothing and are POSTs only so a cart fits in the
+// body. Replaying a cached preview would be actively wrong: it plans against
+// live stock, so the answer must be recomputed each time rather than served
+// from what was true when the key was first seen.
+var idempotencySkip = []string{
+	"/api/v1/auth/",
+	"/api/v1/transfers/preview",
+}
+
+func skipsIdempotency(path string) bool {
+	for _, prefix := range idempotencySkip {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
 
 // idempotent makes mutating calls safe to retry.
 //
@@ -30,14 +52,11 @@ const (
 // correct behaviour on the client's part, so the server has to be what makes it
 // safe.
 //
-// Auth routes are exempt. Logging in is not a business mutation and its effect
-// is a Set-Cookie header, which a replayed body could not reproduce — a replayed
-// login would return 200 with no cookie and leave the user staring at a login
-// screen that says it worked.
+// Some routes are exempt; see [idempotencySkip] for which and why.
 func idempotent(idem *service.Idempotency, log *slog.Logger) func(stdhttp.Handler) stdhttp.Handler {
 	return func(next stdhttp.Handler) stdhttp.Handler {
 		return stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
-			if idem == nil || !mutating(r.Method) || strings.HasPrefix(r.URL.Path, idempotencySkip) {
+			if idem == nil || !mutating(r.Method) || skipsIdempotency(r.URL.Path) {
 				next.ServeHTTP(w, r)
 				return
 			}

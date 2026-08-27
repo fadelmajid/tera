@@ -59,6 +59,12 @@ func newClient(t *testing.T) (c *client, auth *service.Auth, q *gen.Queries, ctx
 		Opname:     service.NewOpname(db, aud, time.Now),
 		Opening:    service.NewOpening(db, aud, time.Now),
 		Sales:      service.NewSales(db, aud, time.Now),
+		Margin:     service.NewMargin(db, aud, time.Now),
+		Transfers:  service.NewTransfers(db, aud, time.Now),
+		Tax:        service.NewTax(db, aud, time.Now),
+		Export:     service.NewExport(db, time.Now),
+		Reports:    service.NewReports(db, time.Now),
+		Omzet:      service.NewOmzet(db, aud, time.Now),
 		// No printer attached in tests, which is also the state of a shop that
 		// has not plugged one in yet: rendering works, sending does not.
 		Printing: service.NewPrinting(gen.New(db), service.NewPrinter(service.PrinterConfig{}),

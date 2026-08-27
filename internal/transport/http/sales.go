@@ -27,7 +27,12 @@ type saleDTO struct {
 	FakturNo     *string   `json:"faktur_no"`
 	GrossIDR     money.IDR `json:"gross_idr"`
 	DiscountIDR  money.IDR `json:"discount_idr"`
+	// DPP + PPN = Total, exactly (SPEC §2.2). PPNInclusive says whether the
+	// prices already contained the tax, snapshotted from the rule that priced
+	// the sale so a receipt reprinted next year breaks down the same way.
+	DPPIDR       money.IDR `json:"dpp_idr"`
 	PPNIDR       money.IDR `json:"ppn_idr"`
+	PPNInclusive bool      `json:"ppn_inclusive"`
 	TotalIDR     money.IDR `json:"total_idr"`
 	COGSIDR      money.IDR `json:"cogs_idr"`
 	IsCredit     bool      `json:"is_credit"`
@@ -41,7 +46,8 @@ func toSaleDTO(s gen.Sale) saleDTO {
 		OccurredAt: s.OccurredAt, Status: s.Status, CustomerID: s.CustomerID,
 		FakturIssued: s.FakturIssued == 1, FakturNo: s.FakturNo,
 		GrossIDR: money.IDR(s.GrossIdr), DiscountIDR: money.IDR(s.DiscountIdr),
-		PPNIDR: money.IDR(s.PpnIdr), TotalIDR: money.IDR(s.TotalIdr),
+		DPPIDR: money.IDR(s.DppIdr), PPNIDR: money.IDR(s.PpnIdr),
+		PPNInclusive: s.PpnInclusive == 1, TotalIDR: money.IDR(s.TotalIdr),
 		COGSIDR: money.IDR(s.CogsIdr), IsCredit: s.IsCredit == 1,
 		DueDate: s.DueDate, VoidReason: s.VoidReason,
 	}
