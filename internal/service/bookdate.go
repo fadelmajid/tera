@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/fadelmajid/tera/internal/domain/omzet"
 	"github.com/fadelmajid/tera/internal/store/gen"
 )
 
@@ -44,6 +45,30 @@ func parseBusinessDate(s string, loc *time.Location) (time.Time, error) {
 type entityClock struct {
 	loc   *time.Location
 	isPKP bool
+	// startMonth is the month the book year opens in. Carried alongside the
+	// zone because the omzet clock needs both to answer which book year a sale
+	// counts in, and asking for them separately is how one gets resolved in the
+	// entity's zone and the other under a different year (INV-5, SPEC §5.4).
+	startMonth int
+}
+
+// bookYear is the book year a business date falls in, for this company.
+//
+// The calendar is built here rather than kept as state: it is cheap, and one
+// place deciding where a year ends is the whole point of domain/omzet owning
+// the rule.
+func (c entityClock) bookYear(businessDate string) (int, error) {
+	cal := omzet.Calendar{Location: c.loc, StartMonth: c.startMonth}
+	year, err := cal.BookYear(businessDate)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %w", ErrValidation, err)
+	}
+	return year, nil
+}
+
+// calendar is the company's book-year calendar, for the report to compute over.
+func (c entityClock) calendar() omzet.Calendar {
+	return omzet.Calendar{Location: c.loc, StartMonth: c.startMonth}
 }
 
 func loadEntityClock(ctx context.Context, tx *sql.Tx, entityID string) (entityClock, error) {
@@ -63,7 +88,9 @@ func loadEntityClock(ctx context.Context, tx *sql.Tx, entityID string) (entityCl
 		// exactly those days (INV-5).
 		return entityClock{}, fmt.Errorf("%w: zona waktu perusahaan %q tidak dikenal", ErrValidation, e.Timezone)
 	}
-	return entityClock{loc: loc, isPKP: e.IsPkp == 1}, nil
+	return entityClock{
+		loc: loc, isPKP: e.IsPkp == 1, startMonth: int(e.BookYearStartMonth),
+	}, nil
 }
 
 // resolveDate turns an optional user-supplied 'YYYY-MM-DD' into the day a

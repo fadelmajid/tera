@@ -94,6 +94,25 @@ func (o *Opname) Start(ctx context.Context, actor Actor, in StartInput) (gen.Sto
 	return created, err
 }
 
+// ReasonCodes are the explanations a variance may carry (R12.5).
+//
+// The same six the storage layer allows, held here so an unrecognised one is a
+// refusal that names the alternatives rather than a constraint violation
+// surfacing as "kesalahan internal" — which is what a person counting a shelf
+// would otherwise be told.
+var ReasonCodes = []string{
+	"RUSAK", "HILANG", "KADALUARSA", "SALAH_CATAT", "RETUR_TIDAK_TERCATAT", "LAINNYA",
+}
+
+func validReasonCode(code string) bool {
+	for _, c := range ReasonCodes {
+		if c == code {
+			return true
+		}
+	}
+	return false
+}
+
 // LineInput is one counted shelf position.
 type LineInput struct {
 	ProductID  string
@@ -146,6 +165,10 @@ func (o *Opname) SaveLine(ctx context.Context, actor Actor, opnameID string, in 
 		variance := in.CountedQty - systemQty
 		if variance != 0 && strings.TrimSpace(in.ReasonCode) == "" {
 			return fmt.Errorf("%w: selisih %d butuh kode alasan (R12.5)", ErrReasonRequired, variance)
+		}
+		if in.ReasonCode != "" && !validReasonCode(in.ReasonCode) {
+			return fmt.Errorf("%w: kode alasan %q tidak dikenal; pilih salah satu dari %s",
+				ErrValidation, in.ReasonCode, strings.Join(ReasonCodes, ", "))
 		}
 
 		unitCost, err := o.resolveSurplusCost(ctx, tx, actor.LegalEntityID, in, owner, variance)

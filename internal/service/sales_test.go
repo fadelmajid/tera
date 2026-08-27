@@ -245,3 +245,53 @@ func TestSaleRequiresAnOpenTill(t *testing.T) {
 		t.Errorf("rang a sale with no till open: %v", err)
 	}
 }
+
+// TestRepeatedProductLinesDrawTheShelfOnce guards a bug that would corrupt
+// exactly the figures Phase 3 reports.
+//
+// A cashier scanning the same item twice, or ringing it at two different
+// prices, produces two lines of one product. The draws for every line are
+// computed before any of them is written, so each line reads the same stored
+// balance -- and without a running total, both would take the same units. The
+// till would sell six of a stock of five and cost them against a layer that
+// never held them, breaking the append-only derivation remaining = qty_in - Σ
+// qty_out (INV-7) and inflating COGS for whoever owns the product.
+func TestRepeatedProductLinesDrawTheShelfOnce(t *testing.T) {
+	t.Parallel()
+
+	w, ctx := newWorld(t, false)
+	w.buy(ctx, t, 5, 10_000, 0, false) // Budi: 5 boxes at Rp 10.000
+	w.till(ctx, t)
+
+	// Six units asked for across two lines, five on the shelf. Short is short,
+	// however the cart is arranged.
+	_, err := w.sales.Ring(ctx, w.actor, service.SaleInput{
+		SaleDate: "2026-10-15",
+		Lines: []service.SaleLineInput{
+			{ProductID: w.gloves, Qty: 3},
+			{ProductID: w.gloves, Qty: 3},
+		},
+	})
+	if !errors.Is(err, service.ErrInsufficientStock) {
+		t.Fatalf("got %v, want ErrInsufficientStock -- the second line drew stock the first had taken", err)
+	}
+
+	// And a cart that does fit costs each line its own slice of the layer.
+	got := w.ring(ctx, t,
+		service.SaleLineInput{ProductID: w.gloves, Qty: 3},
+		service.SaleLineInput{ProductID: w.gloves, Qty: 2},
+	)
+	if got.COGS != 50_000 {
+		t.Errorf("COGS = %s, want %s -- the whole layer, drawn once", got.COGS, money.IDR(50_000))
+	}
+
+	onHand, err := w.opname.CountSheet(ctx, w.entityID)
+	if err != nil {
+		t.Fatalf("count sheet: %v", err)
+	}
+	for _, row := range onHand {
+		if row.ProductID == w.gloves && row.QtyOnHand != 0 {
+			t.Errorf("gloves on hand = %d, want 0", row.QtyOnHand)
+		}
+	}
+}

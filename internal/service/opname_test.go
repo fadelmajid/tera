@@ -323,3 +323,48 @@ func TestOpnameSnapshotsTheSystemQuantityWhenCounted(t *testing.T) {
 			lines[0].SystemQty)
 	}
 }
+
+// TestAnUnknownReasonCodeIsRefusedNotSwallowed names the alternatives.
+//
+// Found by using the software: an invented reason code reached the storage
+// layer, hit the CHECK constraint, and came back to the person counting a shelf
+// as "kesalahan internal". The six allowed codes are a rule about the business
+// (R12.5), so the refusal should name them.
+func TestAnUnknownReasonCodeIsRefusedNotSwallowed(t *testing.T) {
+	t.Parallel()
+
+	w, ctx := newWorld(t, true)
+	w.buy(ctx, t, 10, 10_000, 11_000, true)
+
+	actor := w.actor
+	actor.ClientRequestID = store.NewID()
+	op, err := w.opname.Start(ctx, actor, service.StartInput{CountDate: "2026-10-15"})
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	actor.ClientRequestID = store.NewID()
+	_, err = w.opname.SaveLine(ctx, actor, op.ID, service.LineInput{
+		ProductID: w.gloves, OwnerID: w.budi, CountedQty: 8,
+		ReasonCode: "SELISIH_HITUNG", ReasonNote: "dikarang",
+	})
+	if !errors.Is(err, service.ErrValidation) {
+		t.Fatalf("want ErrValidation, got %v", err)
+	}
+	// The message has to be actionable: somebody is standing at a shelf.
+	for _, want := range []string{"SELISIH_HITUNG", "SALAH_CATAT"} {
+		if !contains(err.Error(), want) {
+			t.Errorf("the refusal does not mention %q: %s", want, err)
+		}
+	}
+
+	// And every documented code is accepted.
+	for _, code := range service.ReasonCodes {
+		actor.ClientRequestID = store.NewID()
+		if _, err := w.opname.SaveLine(ctx, actor, op.ID, service.LineInput{
+			ProductID: w.gloves, OwnerID: w.budi, CountedQty: 8, ReasonCode: code,
+		}); err != nil {
+			t.Errorf("documented code %s was refused: %v", code, err)
+		}
+	}
+}

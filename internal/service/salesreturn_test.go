@@ -144,7 +144,7 @@ func TestReturnRestoresToTheOriginalLayerAndReversesMarginExactly(t *testing.T) 
 	}
 
 	// Return it in pieces: three, then four.
-	var totalRefund, totalCOGS money.IDR
+	var totalRefund, totalPPN, totalCOGS money.IDR
 	for _, qty := range []int64{3, 4} {
 		got, err := w.sales.CreateReturn(ctx, w.actor, service.SaleReturnInput{
 			SaleID: sale.Sale.ID, ReturnDate: "2026-11-02", Reason: "Barang tidak sesuai",
@@ -154,6 +154,7 @@ func TestReturnRestoresToTheOriginalLayerAndReversesMarginExactly(t *testing.T) 
 			t.Fatalf("return %d: %v", qty, err)
 		}
 		totalRefund = totalRefund.Add(got.Refund)
+		totalPPN = totalPPN.Add(got.PPNReversed)
 		totalCOGS = totalCOGS.Add(got.COGSReversed)
 
 		// SPEC §4.4 is undecided, so both dates are on the record either way.
@@ -168,14 +169,27 @@ func TestReturnRestoresToTheOriginalLayerAndReversesMarginExactly(t *testing.T) 
 
 	// Revenue and cost both reverse exactly. Not approximately -- the margin
 	// nets to zero, which is the whole point of returning to the same layer.
+	//
+	// The customer gets back every rupiah they handed over, PPN included: the
+	// Rp 210.000 on the till, split three-then-four, with nothing lost to
+	// rounding on either piece.
 	if totalRefund != 210_000 {
 		t.Errorf("refunded %s in total, want the full %s taken", totalRefund, money.IDR(210_000))
 	}
 	if totalCOGS != 100_000 {
 		t.Errorf("reversed %s of cost, want exactly the layer's %s", totalCOGS, money.IDR(100_000))
 	}
+	// Rp 210.000 inclusive is Rp 189.189 of revenue and Rp 20.811 of PPN, and
+	// the PPN goes back to the state's column rather than the owner's
+	// (SPEC §2.4).
+	if totalPPN != 20_811 {
+		t.Errorf("reversed %s of output PPN, want %s", totalPPN, money.IDR(20_811))
+	}
 	// Revenue out, cost back: a fully returned sale leaves no margin behind.
-	if net := soldMargin.Sub(totalRefund).Add(totalCOGS); !net.IsZero() {
+	// Revenue is the refund less the PPN inside it, which is what the margin
+	// report reverses -- the tax was never margin to begin with.
+	revenueBack := totalRefund.Sub(totalPPN)
+	if net := soldMargin.Sub(revenueBack).Add(totalCOGS); !net.IsZero() {
 		t.Errorf("margin nets to %s after a full return, want zero", net)
 	}
 
@@ -329,4 +343,113 @@ func onHandFor(ctx context.Context, t *testing.T, w world, owner string) int64 {
 		}
 	}
 	return 0
+}
+
+// R12.3's line, enforced in the direction it was missing.
+//
+// A void and a return are separated on one fact: whether the goods ever left
+// the shop. A return is proof they did, so the two cannot both apply to one
+// sale. Voiding after a return was accepted before this guard, and the damage
+// landed in the till rather than the stock: the void withdrew the sale's
+// takings from the session while the cash already refunded against it still
+// stood, so the Z-report reported the drawer as over by the whole sale — money
+// that is really there, recorded as a surplus for somebody to guess at.
+func TestASaleThatHasBeenReturnedCannotBeVoided(t *testing.T) {
+	t.Parallel()
+
+	w, ctx := newWorld(t, true)
+	w.buy(ctx, t, 10, 10_000, 0, false)
+	session := w.till(ctx, t)
+
+	price := money.IDR(20_000)
+	sale := w.ring(ctx, t, service.SaleLineInput{ProductID: w.gloves, Qty: 4, UnitPriceIDR: &price})
+	_, lines, _, err := w.sales.GetSale(ctx, w.entityID, sale.Sale.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	// One of the four comes back, refunded in cash, while the till is still
+	// open — so the void window has not closed and nothing else would stop it.
+	actor := w.actor
+	actor.ClientRequestID = store.NewID()
+	if _, err := w.sales.CreateReturn(ctx, actor, service.SaleReturnInput{
+		SaleID: sale.Sale.ID, ReturnDate: "2026-10-15", Reason: "Kemasan rusak",
+		Lines: []service.SaleReturnLineInput{{SaleLineID: lines[0].ID, Qty: 1}},
+	}); err != nil {
+		t.Fatalf("return: %v", err)
+	}
+
+	before, err := w.sales.Totals(ctx, w.entityID, session.ID)
+	if err != nil {
+		t.Fatalf("totals: %v", err)
+	}
+	// Float 500.000, plus 80.000 taken, less 20.000 refunded.
+	if before.ExpectedCash != 560_000 {
+		t.Fatalf("expected cash before = %s, want %s", before.ExpectedCash, money.IDR(560_000))
+	}
+
+	actor.ClientRequestID = store.NewID()
+	if _, err := w.sales.Void(ctx, actor, sale.Sale.ID, "salah input"); !errors.Is(err, service.ErrVoidAfterReturn) {
+		t.Fatalf("got %v, want ErrVoidAfterReturn", err)
+	}
+
+	// Refused means nothing moved: the sale still stands and the drawer still
+	// reconciles to what is actually in it.
+	after, err := w.sales.Totals(ctx, w.entityID, session.ID)
+	if err != nil {
+		t.Fatalf("totals: %v", err)
+	}
+	if after.ExpectedCash != before.ExpectedCash {
+		t.Errorf("expected cash moved from %s to %s on a refused void",
+			before.ExpectedCash, after.ExpectedCash)
+	}
+	current, _, _, err := w.sales.GetSale(ctx, w.entityID, sale.Sale.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if current.Status != "FINAL" {
+		t.Errorf("sale status = %s after a refused void", current.Status)
+	}
+
+	// The honest correction is still available: return the rest.
+	actor.ClientRequestID = store.NewID()
+	if _, err := w.sales.CreateReturn(ctx, actor, service.SaleReturnInput{
+		SaleID: sale.Sale.ID, ReturnDate: "2026-10-15", Reason: "Sisanya ikut dikembalikan",
+		Lines: []service.SaleReturnLineInput{{SaleLineID: lines[0].ID, Qty: 3}},
+	}); err != nil {
+		t.Errorf("returning the remainder was refused: %v", err)
+	}
+}
+
+// The pair, stated once: a voided sale cannot be returned either. Together
+// these mean a sale is never both voided and returned, which is what lets the
+// Z-report and the margin report each read one of the two without checking for
+// the other.
+func TestAVoidedSaleCannotBeReturned(t *testing.T) {
+	t.Parallel()
+
+	w, ctx := newWorld(t, true)
+	w.buy(ctx, t, 10, 10_000, 0, false)
+	w.till(ctx, t)
+
+	sale := w.ring(ctx, t, service.SaleLineInput{ProductID: w.gloves, Qty: 4})
+	_, lines, _, err := w.sales.GetSale(ctx, w.entityID, sale.Sale.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	actor := w.actor
+	actor.ClientRequestID = store.NewID()
+	if _, err := w.sales.Void(ctx, actor, sale.Sale.ID, "salah input"); err != nil {
+		t.Fatalf("void: %v", err)
+	}
+
+	actor.ClientRequestID = store.NewID()
+	_, err = w.sales.CreateReturn(ctx, actor, service.SaleReturnInput{
+		SaleID: sale.Sale.ID, ReturnDate: "2026-10-16", Reason: "Barang dikembalikan",
+		Lines: []service.SaleReturnLineInput{{SaleLineID: lines[0].ID, Qty: 1}},
+	})
+	if !errors.Is(err, service.ErrAlreadyVoid) {
+		t.Fatalf("got %v, want ErrAlreadyVoid", err)
+	}
 }

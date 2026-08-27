@@ -91,3 +91,45 @@ func (r Role) CanManageUsers() bool { return r.AtLeast(RoleOwner) }
 // This is an authority the query layer enforces, not the screen. A margin
 // figure that reaches the browser has already left the building.
 func (r Role) CanSeeAllOwnerMargin() bool { return r.AtLeast(RoleManager) }
+
+// CanSeeTaxPosition reports whether the role may see the PPN position
+// (SPEC §2.4).
+//
+// Manager or above, for the same reason as owner margin: it is a figure the
+// business owes and plans around, not something a cashier needs at the till.
+func (r Role) CanSeeTaxPosition() bool { return r.AtLeast(RoleManager) }
+
+// CanManageTaxRules reports whether the role may change the tax configuration.
+//
+// Owner only, and the strictest gate in the system after user management. A
+// tax_rule decides what every subsequent sale charges: set it wrong in one
+// direction and the shop overcharges its customers, in the other it accrues a
+// liability it is not collecting for (SPEC §2.3). It is also the one screen
+// whose figures a konsultan pajak will be shown, and the person who answers to
+// them should be the person who set them.
+//
+// Historical sales carry their own snapshot and never move when this changes
+// (INV-3), so the blast radius is forward-looking — which is the only reason
+// this is a settings screen at all rather than a migration.
+func (r Role) CanManageTaxRules() bool { return r.AtLeast(RoleOwner) }
+
+// CanSeeReports reports whether the role may read the sales, purchase, stock,
+// hutang and piutang reports (TASKS 6.1–6.5).
+//
+// Manager or above. Every one of them carries a cost figure — what stock is
+// worth, what a supplier was paid, which customers owe money — and a cashier
+// needs none of it to ring a sale. The till's product grid is what a cashier
+// uses to know whether something is in stock.
+func (r Role) CanSeeReports() bool { return r.AtLeast(RoleManager) }
+
+// CanExportEverything reports whether the role may download the whole database
+// (R14.3, TASKS 6.6).
+//
+// Owner, and — because the archive is not entity-scoped and cannot be — owner
+// in every active company rather than in the one selected. The transport layer
+// enforces that half; this predicate is only the per-entity question.
+//
+// The export exists so the family can leave with their data. Anyone who can
+// take the whole business out of the building should be someone entitled to
+// the whole business.
+func (r Role) CanExportEverything() bool { return r.AtLeast(RoleOwner) }

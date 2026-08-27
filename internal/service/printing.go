@@ -131,6 +131,9 @@ func (p *Printing) Receipt(ctx context.Context, entityID, saleID string) (*escpo
 	// wrong question from a customer.
 	if sale.PpnIdr > 0 {
 		r.PPN = money.IDR(sale.PpnIdr).String()
+		// Snapshotted from the rule that priced the sale (INV-3), so a reprint
+		// next year labels it the same way it did at the till.
+		r.PPNInclusive = sale.PpnInclusive == 1
 	}
 
 	var tendered money.IDR

@@ -398,6 +398,68 @@ func (o *Opening) ListPayables(ctx context.Context, entityID string, outstanding
 	return rows, nil
 }
 
+// DebtDetail is one hutang or piutang document with the payments against it.
+//
+// R5.8 asks for partial payments, and a partial payment is only auditable if
+// the parts are visible: "Rp 4.000.000 outstanding" answers nothing when the
+// supplier's question is which of their invoices the last transfer was for.
+type DebtDetail struct {
+	Payable    *gen.PayableBalance
+	Receivable *gen.ReceivableBalance
+	Payments   []DebtPayment
+}
+
+// DebtPayment is one payment against a document.
+type DebtPayment struct {
+	ID        string
+	AmountIDR money.IDR
+	PaidOn    string
+	Method    string
+	Note      string
+}
+
+// PayableDetail returns one hutang document and every payment against it.
+func (o *Opening) PayableDetail(ctx context.Context, entityID, id string) (DebtDetail, error) {
+	row, err := o.q.GetPayable(ctx, id)
+	if err != nil || row.EntityID != entityID {
+		return DebtDetail{}, fmt.Errorf("%w: hutang tidak ditemukan", ErrNotFound)
+	}
+	payments, err := o.q.ListPayablePayments(ctx, id)
+	if err != nil {
+		return DebtDetail{}, fmt.Errorf("service: payable payments: %w", err)
+	}
+
+	out := DebtDetail{Payable: &row}
+	for _, p := range payments {
+		out.Payments = append(out.Payments, DebtPayment{
+			ID: p.ID, AmountIDR: money.IDR(p.AmountIdr), PaidOn: p.PaidOn,
+			Method: p.Method, Note: derefString(p.Note),
+		})
+	}
+	return out, nil
+}
+
+// ReceivableDetail returns one piutang document and every payment against it.
+func (o *Opening) ReceivableDetail(ctx context.Context, entityID, id string) (DebtDetail, error) {
+	row, err := o.q.GetReceivable(ctx, id)
+	if err != nil || row.EntityID != entityID {
+		return DebtDetail{}, fmt.Errorf("%w: piutang tidak ditemukan", ErrNotFound)
+	}
+	payments, err := o.q.ListReceivablePayments(ctx, id)
+	if err != nil {
+		return DebtDetail{}, fmt.Errorf("service: receivable payments: %w", err)
+	}
+
+	out := DebtDetail{Receivable: &row}
+	for _, p := range payments {
+		out.Payments = append(out.Payments, DebtPayment{
+			ID: p.ID, AmountIDR: money.IDR(p.AmountIdr), PaidOn: p.PaidOn,
+			Method: p.Method, Note: derefString(p.Note),
+		})
+	}
+	return out, nil
+}
+
 // ListReceivables returns piutang.
 func (o *Opening) ListReceivables(ctx context.Context, entityID string, outstandingOnly bool) ([]gen.ReceivableBalance, error) {
 	if outstandingOnly {

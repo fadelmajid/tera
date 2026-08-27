@@ -134,12 +134,27 @@ func (m *MasterData) CreateEntity(ctx context.Context, actor Actor, in EntityInp
 		}
 		created = row
 
-		return m.aud.Record(ctx, tx, &Entry{
+		if err := m.aud.Record(ctx, tx, &Entry{
 			ActorUserID: actor.UserID, LegalEntityID: row.ID,
 			RecordType: "legal_entity", RecordID: row.ID,
 			Action: ActionCreate, After: row,
 			ClientRequestID: actor.ClientRequestID,
-		})
+		}); err != nil {
+			return err
+		}
+
+		// A PKP company cannot ring a sale without a rule in force (TASKS 5.4),
+		// so its tax configuration is part of creating it rather than a second
+		// step somebody discovers at the till. A non-PKP company is seeded with
+		// nothing, which is what it is entitled to charge (TASKS 5.5).
+		if err := seedTaxRules(ctx, tx, m.aud, actor, row, now); err != nil {
+			return err
+		}
+
+		// Both companies get an omzet threshold (SPEC §5.3). Only the non-PKP one
+		// can still cross, but the owner's question is how each is doing against
+		// the line, not how the one that has not crossed is doing.
+		return seedOmzetThreshold(ctx, tx, m.aud, actor, row, now)
 	})
 	return created, err
 }

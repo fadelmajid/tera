@@ -11,6 +11,7 @@ import (
 	"github.com/fadelmajid/tera/internal/service"
 	"github.com/fadelmajid/tera/internal/store"
 	"github.com/fadelmajid/tera/internal/store/gen"
+	"github.com/fadelmajid/tera/internal/store/seed"
 )
 
 // fixedNow keeps every test deterministic. 2026-10-15 14:30 UTC is 21:30 WIB,
@@ -26,6 +27,7 @@ type world struct {
 	opname   *service.Opname
 	opening  *service.Opening
 	sales    *service.Sales
+	taxes    *service.Tax
 	actor    service.Actor
 	entityID string
 	supplier string
@@ -91,12 +93,16 @@ func newWorld(t *testing.T, isPKP bool) (world, context.Context) {
 		t.Fatalf("supplier: %v", err)
 	}
 
+	seedTaxRules(ctx, t, q, entity)
+	seedOmzetThreshold(ctx, t, q, entity)
+
 	w := world{
 		db: db, q: q,
 		purch:   service.NewPurchasing(db, aud, now),
 		opname:  service.NewOpname(db, aud, now),
 		sales:   service.NewSales(db, aud, now),
 		opening: service.NewOpening(db, aud, now),
+		taxes:   service.NewTax(db, aud, now),
 		actor: service.Actor{
 			LegalEntityID: entity.ID, ClientRequestID: store.NewID(),
 		},
@@ -113,6 +119,53 @@ func boolInt(b bool) int64 {
 		return 1
 	}
 	return 0
+}
+
+// seedTaxRules gives the fixture company the same tax configuration a real one
+// gets when it is created (TASKS 5.2).
+//
+// Not optional for a PKP company: a PKP owes output PPN on every taxable
+// delivery, so ringing a sale with no rule in force is refused (TASKS 5.4).
+// A non-PKP company gets nothing, which is what it may charge (TASKS 5.5).
+//
+// Read from seed.TaxRulesFor rather than written out here, so a change to the
+// seeded default moves these tests with it instead of leaving them asserting a
+// rate the product no longer uses.
+// seedOmzetThreshold gives the fixture company the Rp 4,8 miliar threshold a
+// real one gets when it is created (TASKS 7.1).
+//
+// Not optional: domain/omzet has no fallback figure and refuses to measure
+// turnover against a threshold nobody configured (INV-4).
+func seedOmzetThreshold(ctx context.Context, t *testing.T, q *gen.Queries, entity gen.LegalEntity) {
+	t.Helper()
+
+	th := seed.OmzetThresholdFor()
+	if _, err := q.CreateOmzetThreshold(ctx, gen.CreateOmzetThresholdParams{
+		ID: store.NewID(), EntityID: entity.ID, AmountIdr: th.AmountIDR,
+		WatchBp: th.WatchBP, WarnBp: th.WarnBP,
+		RegisterByPolicy: th.RegisterByPolicy, VatStartsPolicy: th.VATStartsPolicy,
+		ValidFrom: th.ValidFrom, LegalRef: th.LegalRef,
+		CreatedAt: fixedNow.Unix(),
+	}); err != nil {
+		t.Fatalf("seed omzet threshold: %v", err)
+	}
+}
+
+func seedTaxRules(ctx context.Context, t *testing.T, q *gen.Queries, entity gen.LegalEntity) {
+	t.Helper()
+
+	for _, r := range seed.TaxRulesFor(entity.IsPkp == 1) {
+		if _, err := q.CreateTaxRule(ctx, gen.CreateTaxRuleParams{
+			ID: store.NewID(), EntityID: entity.ID, TaxType: r.Type,
+			RateBp: r.RateBP, DppFactorNum: r.DPPNum, DppFactorDen: r.DPPDen,
+			IsInclusive: boolInt(r.Inclusive), CalculationLevel: r.Level,
+			RoundingMode: r.Rounding, RoundingUnit: r.RoundingUnit,
+			ValidFrom: r.ValidFrom, LegalRef: r.LegalRef,
+			CreatedAt: fixedNow.Unix(),
+		}); err != nil {
+			t.Fatalf("seed tax rule: %v", err)
+		}
+	}
 }
 
 // buy records one purchase of `qty` gloves at `unit` with `ppn` PPN.
