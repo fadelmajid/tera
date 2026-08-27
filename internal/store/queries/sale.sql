@@ -62,29 +62,38 @@ JOIN sale s ON s.id = r.sale_id
 WHERE s.cash_session_id = sqlc.arg(cash_session_id)
   AND r.refund_method = 'TUNAI';
 
+-- dpp_idr and ppn_idr come from domain/tax and the table CHECKs that they sum
+-- to total_idr (SPEC 2.2). ppn_inclusive is snapshotted from the rule that
+-- priced the sale, so a receipt reprinted next year breaks down the same way.
 -- name: CreateSale :one
 INSERT INTO sale (
     id, entity_id, cash_session_id, customer_id, invoice_no, occurred_at,
     business_date, status, faktur_issued, faktur_no, gross_idr, discount_idr,
-    ppn_idr, total_idr, cogs_idr, is_credit, due_date, note, created_by, created_at
+    dpp_idr, ppn_idr, ppn_inclusive, total_idr, cogs_idr, is_credit, due_date,
+    note, created_by, created_at
 ) VALUES (
     sqlc.arg(id), sqlc.arg(entity_id), sqlc.narg(cash_session_id), sqlc.narg(customer_id),
     sqlc.arg(invoice_no), sqlc.arg(occurred_at), sqlc.arg(business_date), 'FINAL',
     sqlc.arg(faktur_issued), sqlc.narg(faktur_no), sqlc.arg(gross_idr), sqlc.arg(discount_idr),
-    sqlc.arg(ppn_idr), sqlc.arg(total_idr), sqlc.arg(cogs_idr), sqlc.arg(is_credit),
+    sqlc.arg(dpp_idr), sqlc.arg(ppn_idr), sqlc.arg(ppn_inclusive), sqlc.arg(total_idr),
+    sqlc.arg(cogs_idr), sqlc.arg(is_credit),
     sqlc.narg(due_date), sqlc.narg(note), sqlc.narg(created_by), sqlc.arg(created_at)
 )
 RETURNING *;
 
+-- dpp_idr is this line's revenue for the margin report: COGS is already net of
+-- creditable PPN (SPEC 3.2), so revenue has to be too or the two do not
+-- compare. Under inclusive pricing net_idr contains the tax.
 -- name: CreateSaleLine :one
 INSERT INTO sale_line (
     id, sale_id, product_id, owner_id, qty, unit_price_idr, gross_idr,
-    line_discount_idr, alloc_discount_idr, net_idr, cogs_idr, created_at
+    line_discount_idr, alloc_discount_idr, net_idr, dpp_idr, ppn_idr,
+    cogs_idr, created_at
 ) VALUES (
     sqlc.arg(id), sqlc.arg(sale_id), sqlc.arg(product_id), sqlc.narg(owner_id),
     sqlc.arg(qty), sqlc.arg(unit_price_idr), sqlc.arg(gross_idr),
     sqlc.arg(line_discount_idr), sqlc.arg(alloc_discount_idr), sqlc.arg(net_idr),
-    sqlc.arg(cogs_idr), sqlc.arg(created_at)
+    sqlc.arg(dpp_idr), sqlc.arg(ppn_idr), sqlc.arg(cogs_idr), sqlc.arg(created_at)
 )
 RETURNING *;
 
@@ -143,24 +152,31 @@ SET status = 'VOID',
 WHERE id = sqlc.arg(id) AND status = 'FINAL'
 RETURNING *;
 
+-- ppn_reversed_idr is output PPN handed back, prorated from the snapshot on the
+-- original sale rather than recomputed against today's rate (INV-3). It nets
+-- against output PPN in the position report, exactly as a purchase return nets
+-- against creditable input.
 -- name: CreateSaleReturn :one
 INSERT INTO sale_return (
     id, entity_id, sale_id, occurred_at, business_date, sale_business_date,
-    reason, refund_idr, cogs_reversed_idr, refund_method, created_by, created_at
+    reason, refund_idr, cogs_reversed_idr, ppn_reversed_idr, refund_method,
+    created_by, created_at
 ) VALUES (
     sqlc.arg(id), sqlc.arg(entity_id), sqlc.arg(sale_id), sqlc.arg(occurred_at),
     sqlc.arg(business_date), sqlc.arg(sale_business_date), sqlc.arg(reason),
-    sqlc.arg(refund_idr), sqlc.arg(cogs_reversed_idr), sqlc.arg(refund_method),
-    sqlc.narg(created_by), sqlc.arg(created_at)
+    sqlc.arg(refund_idr), sqlc.arg(cogs_reversed_idr), sqlc.arg(ppn_reversed_idr),
+    sqlc.arg(refund_method), sqlc.narg(created_by), sqlc.arg(created_at)
 )
 RETURNING *;
 
 -- name: CreateSaleReturnLine :one
 INSERT INTO sale_return_line (
-    id, sale_return_id, sale_line_id, qty, refund_idr, cogs_reversed_idr, created_at
+    id, sale_return_id, sale_line_id, qty, refund_idr, cogs_reversed_idr,
+    ppn_reversed_idr, created_at
 ) VALUES (
     sqlc.arg(id), sqlc.arg(sale_return_id), sqlc.arg(sale_line_id), sqlc.arg(qty),
-    sqlc.arg(refund_idr), sqlc.arg(cogs_reversed_idr), sqlc.arg(created_at)
+    sqlc.arg(refund_idr), sqlc.arg(cogs_reversed_idr), sqlc.arg(ppn_reversed_idr),
+    sqlc.arg(created_at)
 )
 RETURNING *;
 

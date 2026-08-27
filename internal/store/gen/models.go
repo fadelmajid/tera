@@ -73,6 +73,55 @@ type LegalEntity struct {
 	UpdatedAt          int64
 }
 
+type MarginSetting struct {
+	EntityID         string
+	ReturnPeriodRule string
+	Note             *string
+	UpdatedBy        *string
+	UpdatedAt        int64
+	CreatedAt        int64
+}
+
+type OmzetLedger struct {
+	ID              string
+	EntityID        string
+	BookYear        int64
+	EffectiveDate   string
+	EventType       string
+	SignedAmountIdr int64
+	SourceTxnID     *string
+	Note            *string
+	CreatedBy       *string
+	CreatedAt       int64
+}
+
+type OmzetSetting struct {
+	EntityID  string
+	Base      string
+	Note      *string
+	UpdatedBy *string
+	UpdatedAt int64
+	CreatedAt int64
+}
+
+type OmzetThreshold struct {
+	ID               string
+	EntityID         string
+	AmountIdr        int64
+	WatchBp          int64
+	WarnBp           int64
+	RegisterByPolicy string
+	VatStartsPolicy  string
+	ValidFrom        string
+	ValidTo          *string
+	LegalRef         string
+	Note             *string
+	CreatedBy        *string
+	CreatedAt        int64
+	ClosedBy         *string
+	ClosedAt         *int64
+}
+
 type Owner struct {
 	ID        string
 	Code      string
@@ -268,7 +317,9 @@ type Sale struct {
 	FakturNo      *string
 	GrossIdr      int64
 	DiscountIdr   int64
+	DppIdr        int64
 	PpnIdr        int64
+	PpnInclusive  int64
 	TotalIdr      int64
 	CogsIdr       int64
 	IsCredit      int64
@@ -289,6 +340,8 @@ type SaleLine struct {
 	LineDiscountIdr  int64
 	AllocDiscountIdr int64
 	NetIdr           int64
+	DppIdr           int64
+	PpnIdr           int64
 	CogsIdr          int64
 	CreatedAt        int64
 }
@@ -315,6 +368,7 @@ type SaleReturn struct {
 	RefundMethod     string
 	CreatedBy        *string
 	CreatedAt        int64
+	PpnReversedIdr   int64
 }
 
 type SaleReturnLine struct {
@@ -325,6 +379,27 @@ type SaleReturnLine struct {
 	RefundIdr       int64
 	CogsReversedIdr int64
 	CreatedAt       int64
+	PpnReversedIdr  int64
+}
+
+type SaleTax struct {
+	ID               string
+	SaleID           string
+	SaleLineID       string
+	TaxType          string
+	RateBp           int64
+	DppFactorNum     int64
+	DppFactorDen     int64
+	IsInclusive      int64
+	CalculationLevel string
+	RoundingMode     string
+	RoundingUnit     int64
+	LegalRef         string
+	TaxRuleID        *string
+	IsExempt         int64
+	DppIdr           int64
+	PpnIdr           int64
+	CreatedAt        int64
 }
 
 type Session struct {
@@ -431,6 +506,62 @@ type Supplier struct {
 	IsActive     int64
 	CreatedAt    int64
 	UpdatedAt    int64
+}
+
+type TaxRule struct {
+	ID               string
+	EntityID         string
+	TaxType          string
+	RateBp           int64
+	DppFactorNum     int64
+	DppFactorDen     int64
+	IsInclusive      int64
+	CalculationLevel string
+	RoundingMode     string
+	RoundingUnit     int64
+	ValidFrom        string
+	ValidTo          *string
+	LegalRef         string
+	Note             *string
+	CreatedBy        *string
+	CreatedAt        int64
+	ClosedBy         *string
+	ClosedAt         *int64
+}
+
+type Transfer struct {
+	ID              string
+	FromEntityID    string
+	ToEntityID      string
+	TransferNo      string
+	OccurredAt      int64
+	BusinessDate    string
+	ToBusinessDate  string
+	FromIsPkp       int64
+	ToIsPkp         int64
+	CreditLossAck   int64
+	ForfeitedPpnIdr int64
+	CostTotalIdr    int64
+	PpnIdr          int64
+	AmountIdr       int64
+	FakturIssued    int64
+	FakturNo        *string
+	Note            *string
+	CreatedBy       *string
+	CreatedAt       int64
+}
+
+type TransferLine struct {
+	ID              string
+	TransferID      string
+	ProductID       string
+	OwnerID         *string
+	Qty             int64
+	CostTotalIdr    int64
+	PpnIdr          int64
+	ForfeitedPpnIdr int64
+	DestLayerID     string
+	CreatedAt       int64
 }
 
 type UserEntityRole struct {

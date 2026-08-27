@@ -9,18 +9,36 @@ import (
 )
 
 type Querier interface {
+	// The omzet clock. TASKS 7.1-7.11, SPEC 5.
+	// Keep this file ASCII-only -- see README.
+	//
+	// Nothing here aggregates. The ledger rows are loaded and internal/domain/omzet
+	// does the arithmetic, for the same reason margin.sql does it that way: the
+	// book-year window, the stickiness of a crossing, and the two dates it emits are
+	// rules with edges, and SQL is the worst place to test a rule. A CASE expression
+	// can express "crossed" -- nothing can write a test against it.
+	AppendOmzet(ctx context.Context, arg AppendOmzetParams) (OmzetLedger, error)
 	// Claims an id. Returns the number of rows inserted: 1 means this caller owns
 	// the request, 0 means someone else already claimed it.
 	ClaimRequest(ctx context.Context, arg ClaimRequestParams) (int64, error)
 	CloseCashSession(ctx context.Context, arg CloseCashSessionParams) (CashSession, error)
+	// The only permitted edit (INV-4): close the window so a new row can open the
+	// next day.
+	CloseOmzetThreshold(ctx context.Context, arg CloseOmzetThresholdParams) (OmzetThreshold, error)
+	// The only permitted edit (INV-4): close the window so a new row can open the
+	// next day. The WHERE clause makes it a no-op on an already-closed rule rather
+	// than a trigger abort.
+	CloseTaxRule(ctx context.Context, arg CloseTaxRuleParams) (TaxRule, error)
 	CompleteRequest(ctx context.Context, arg CompleteRequestParams) error
 	CountAuditLog(ctx context.Context) (int64, error)
 	// Invoice numbers are per company and sequential within a business date, which
 	// is what a shop expects to read off a receipt.
 	CountSalesOnDate(ctx context.Context, arg CountSalesOnDateParams) (int64, error)
+	CountTransfersOnDate(ctx context.Context, arg CountTransfersOnDateParams) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
 	CreateCustomer(ctx context.Context, arg CreateCustomerParams) (Customer, error)
 	CreateLegalEntity(ctx context.Context, arg CreateLegalEntityParams) (LegalEntity, error)
+	CreateOmzetThreshold(ctx context.Context, arg CreateOmzetThresholdParams) (OmzetThreshold, error)
 	// Stock opname. TASKS 1.10, R12.4-5. Keep this file ASCII-only -- see README.
 	CreateOpname(ctx context.Context, arg CreateOpnameParams) (StockOpname, error)
 	CreateOpnamePosting(ctx context.Context, arg CreateOpnamePostingParams) (StockOpnamePosting, error)
@@ -38,11 +56,23 @@ type Querier interface {
 	CreatePurchaseReturn(ctx context.Context, arg CreatePurchaseReturnParams) (PurchaseReturn, error)
 	CreatePurchaseReturnLine(ctx context.Context, arg CreatePurchaseReturnLineParams) (PurchaseReturnLine, error)
 	CreateReceivable(ctx context.Context, arg CreateReceivableParams) (Receivable, error)
+	// dpp_idr and ppn_idr come from domain/tax and the table CHECKs that they sum
+	// to total_idr (SPEC 2.2). ppn_inclusive is snapshotted from the rule that
+	// priced the sale, so a receipt reprinted next year breaks down the same way.
 	CreateSale(ctx context.Context, arg CreateSaleParams) (Sale, error)
+	// dpp_idr is this line's revenue for the margin report: COGS is already net of
+	// creditable PPN (SPEC 3.2), so revenue has to be too or the two do not
+	// compare. Under inclusive pricing net_idr contains the tax.
 	CreateSaleLine(ctx context.Context, arg CreateSaleLineParams) (SaleLine, error)
 	CreateSalePayment(ctx context.Context, arg CreateSalePaymentParams) (SalePayment, error)
+	// ppn_reversed_idr is output PPN handed back, prorated from the snapshot on the
+	// original sale rather than recomputed against today's rate (INV-3). It nets
+	// against output PPN in the position report, exactly as a purchase return nets
+	// against creditable input.
 	CreateSaleReturn(ctx context.Context, arg CreateSaleReturnParams) (SaleReturn, error)
 	CreateSaleReturnLine(ctx context.Context, arg CreateSaleReturnLineParams) (SaleReturnLine, error)
+	// --- the sale-time snapshot (INV-3) -----------------------------------------
+	CreateSaleTax(ctx context.Context, arg CreateSaleTaxParams) (SaleTax, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	// FIFO inventory. Both tables are append-only (INV-7), so there is no UPDATE
 	// and no DELETE in this file, and there never should be. Corrections are
@@ -50,17 +80,44 @@ type Querier interface {
 	// but the absence here is the first thing a reader should notice.
 	CreateStockLayer(ctx context.Context, arg CreateStockLayerParams) (StockLayer, error)
 	CreateSupplier(ctx context.Context, arg CreateSupplierParams) (Supplier, error)
+	CreateTaxRule(ctx context.Context, arg CreateTaxRuleParams) (TaxRule, error)
+	// Inter-company stock transfer. TASKS 4.1-4.6, SPEC 3.4.
+	// Keep this file ASCII-only -- see README.
+	//
+	// A transfer is immutable (INV-2), so there is no UPDATE and no DELETE here.
+	// A correction is a transfer the other way.
+	CreateTransfer(ctx context.Context, arg CreateTransferParams) (Transfer, error)
+	CreateTransferLine(ctx context.Context, arg CreateTransferLineParams) (TransferLine, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (AppUser, error)
 	DeleteExpiredSessions(ctx context.Context, now int64) error
 	DeleteOpnameLine(ctx context.Context, id string) error
 	DeleteSession(ctx context.Context, tokenHash string) error
 	DeleteSessionsForUser(ctx context.Context, userID string) error
+	// Only a rule that has not started yet may be removed, and the service checks
+	// that against the entity's own clock before calling this. A rule already in
+	// force is closed, never deleted: sales were priced under it and the report
+	// that explains them reads its citation.
+	DeleteTaxRule(ctx context.Context, arg DeleteTaxRuleParams) error
 	GetCashSession(ctx context.Context, id string) (CashSession, error)
 	GetCustomer(ctx context.Context, id string) (Customer, error)
 	GetCustomerByCode(ctx context.Context, code string) (Customer, error)
 	GetLayerBalance(ctx context.Context, id string) (StockLayerBalance, error)
 	GetLegalEntity(ctx context.Context, id string) (LegalEntity, error)
 	GetLegalEntityByCode(ctx context.Context, code string) (LegalEntity, error)
+	// Laporan Margin per Owner. TASKS 3.1-3.6, SPEC 4.
+	// Keep this file ASCII-only -- see README.
+	//
+	// Six range-scoped reads, not a query per sale. The whole period is loaded once
+	// and internal/domain/margin does the arithmetic, because the arithmetic is the
+	// part that has to be tested exhaustively and SQL is the worst place to test it.
+	//
+	// Nothing here aggregates money. Every rupiah figure the report shows is summed
+	// in Go from the rows below, so the total and the drill-down are the same
+	// numbers added up twice rather than two queries that have to agree (SPEC 4.2).
+	GetMarginSetting(ctx context.Context, entityID string) (MarginSetting, error)
+	// --- per-company settings ---------------------------------------------------
+	GetOmzetSetting(ctx context.Context, entityID string) (OmzetSetting, error)
+	GetOmzetThreshold(ctx context.Context, id string) (OmzetThreshold, error)
 	// At most one open session per company, so this is a row or nothing. It is
 	// also the void window: a sale can be undone until its session closes.
 	GetOpenCashSession(ctx context.Context, entityID string) (CashSession, error)
@@ -88,9 +145,18 @@ type Querier interface {
 	GetStockOnHandForOwner(ctx context.Context, arg GetStockOnHandForOwnerParams) (int64, error)
 	GetSupplier(ctx context.Context, id string) (Supplier, error)
 	GetSupplierByCode(ctx context.Context, code string) (Supplier, error)
+	GetTaxRule(ctx context.Context, id string) (TaxRule, error)
+	GetTransfer(ctx context.Context, id string) (Transfer, error)
 	GetUser(ctx context.Context, id string) (AppUser, error)
 	GetUserByUsername(ctx context.Context, username string) (AppUser, error)
 	GrantRole(ctx context.Context, arg GrantRoleParams) error
+	// D-014: what each company owes the other, at cost, netted off. Deliberately
+	// not hutang or piutang -- those are about suppliers and customers, and a
+	// family's internal bookkeeping does not belong in a supplier aging report.
+	//
+	// Grouped by counterparty rather than assuming there are two companies. There
+	// are two today; the query does not need to know that.
+	InterCompanyPosition(ctx context.Context, entityID string) ([]InterCompanyPositionRow, error)
 	// The unit cost a surplus line defaults to: the most recent layer of the same
 	// product and owner. Found stock is nearly always a miscounted recent delivery,
 	// so that layer is the best available answer. Derived from the layer total and
@@ -120,6 +186,10 @@ type Querier interface {
 	// query below rather than a nullable parameter, matching how the margin report
 	// treats it (R2.2).
 	ListLayerBalancesByOwner(ctx context.Context, arg ListLayerBalancesByOwnerParams) ([]StockLayerBalance, error)
+	// The PPN paid on a layer, so a transfer that destroys input credit can quote
+	// what is actually being given up rather than a percentage of a guess (R4.5).
+	// Read alongside the balances the FIFO consumption planner already loads.
+	ListLayerPPNForProduct(ctx context.Context, arg ListLayerPPNForProductParams) ([]ListLayerPPNForProductRow, error)
 	// The layers one purchase created. Needed to reverse it (R12.2).
 	ListLayersBySourceDoc(ctx context.Context, arg ListLayersBySourceDocParams) ([]StockLayer, error)
 	// The FIFO candidate set for a draw, oldest first, ties broken by id (SPEC 3.3).
@@ -134,6 +204,24 @@ type Querier interface {
 	// stay in the table forever regardless; nothing here deletes.
 	ListLayersForConsumption(ctx context.Context, arg ListLayersForConsumptionParams) ([]StockLayerBalance, error)
 	ListLegalEntities(ctx context.Context) ([]LegalEntity, error)
+	// Which book years have any turnover at all, so the screen can offer a year
+	// picker built from the data rather than from a guess about when trading began.
+	ListOmzetBookYears(ctx context.Context, entityID string) ([]int64, error)
+	// Every row the clock needs, across a range wide enough to cover both the book
+	// year and the trailing twelve months. The service declares that range to the
+	// domain, which refuses a request whose rows cannot cover what it is being
+	// asked for -- a trailing figure that is quietly short is worse than none,
+	// because it is the number somebody plans a year around.
+	ListOmzetEntries(ctx context.Context, arg ListOmzetEntriesParams) ([]OmzetLedger, error)
+	// The documents behind one book year, newest first, for the drill-down.
+	ListOmzetForBookYear(ctx context.Context, arg ListOmzetForBookYearParams) ([]ListOmzetForBookYearRow, error)
+	// The rows one sale has produced, so a void or a return reverses exactly what
+	// was counted rather than recomputing it from today's configuration. A base
+	// setting changed between the sale and the return would otherwise leave a
+	// difference in the clock with nothing to explain it.
+	ListOmzetForSource(ctx context.Context, sourceTxnID *string) ([]OmzetLedger, error)
+	// --- the threshold, effective-dated (INV-4) ---------------------------------
+	ListOmzetThresholds(ctx context.Context, entityID string) ([]OmzetThreshold, error)
 	// The variance report (R12.4). Joined to product and owner so the person
 	// signing it off sees names, not ids.
 	ListOpnameLines(ctx context.Context, opnameID string) ([]ListOpnameLinesRow, error)
@@ -149,22 +237,88 @@ type Querier interface {
 	ListPurchaseLines(ctx context.Context, purchaseID string) ([]ListPurchaseLinesRow, error)
 	ListPurchaseReturns(ctx context.Context, purchaseID string) ([]PurchaseReturn, error)
 	ListPurchases(ctx context.Context, arg ListPurchasesParams) ([]Purchase, error)
+	// The purchases behind the input side, with the faktur fact that decides
+	// whether each one counted (INV-9).
+	ListPurchasesForPPN(ctx context.Context, arg ListPurchasesForPPNParams) ([]ListPurchasesForPPNRow, error)
 	ListReceivablePayments(ctx context.Context, receivableID string) ([]ReceivablePayment, error)
 	ListReceivables(ctx context.Context, entityID string) ([]ReceivableBalance, error)
+	// The reversal rows: negative quantity, negative cost, each naming the draw it
+	// gives back (D-010). They restore stock to the layer it came from, which is
+	// what makes the margin reverse at exactly the cost that was taken.
+	ListReturnDrawsForMargin(ctx context.Context, arg ListReturnDrawsForMarginParams) ([]ListReturnDrawsForMarginRow, error)
+	// The owner comes from the sale line the goods went out on, so a return lands
+	// in the same person's bucket the revenue did (D-010).
+	ListReturnLinesForMargin(ctx context.Context, arg ListReturnLinesForMarginParams) ([]ListReturnLinesForMarginRow, error)
+	// Returns touching the window from EITHER side.
+	//
+	// Deliberately not filtered by the rule in force. Whether a return counts in
+	// the month it came back or the month it was sold is SPEC 4.4's open question,
+	// and that question is answered in exactly one place -- internal/domain/margin
+	// -- where it is tested. Encoding it here as well would make two implementations
+	// of the same rule, and the day they disagree is a settlement nobody can
+	// reconcile. At under 1,000 transactions a day, loading the handful of extra
+	// rows costs nothing.
+	ListReturnsForMargin(ctx context.Context, arg ListReturnsForMarginParams) ([]ListReturnsForMarginRow, error)
 	ListRolesForUser(ctx context.Context, userID string) ([]ListRolesForUserRow, error)
 	// The drill-down's first level (SPEC 4.2): the draws one sale made, with the
 	// layer each came from. The consumption rows are the authority for COGS; the
 	// figure on the sale header is a convenience for the sales report.
 	ListSaleConsumptions(ctx context.Context, movementID string) ([]ListSaleConsumptionsRow, error)
+	// COGS, from the actual layers drawn (SPEC 4.1), and the bottom of the
+	// drill-down (SPEC 4.2). owner_id comes from the layer here -- recorded when
+	// the goods were bought -- which is the second, independent attribution the
+	// domain checks against the line above.
+	ListSaleDrawsForMargin(ctx context.Context, arg ListSaleDrawsForMarginParams) ([]ListSaleDrawsForMarginRow, error)
 	ListSaleLines(ctx context.Context, saleID string) ([]ListSaleLinesRow, error)
+	// Revenue, and the owner it was attributed to at the moment of sale. owner_id
+	// is read from the line, not from the product: re-tagging a product later must
+	// not move money that has already been settled (INV-8).
+	//
+	// Revenue is dpp_idr, not net_idr. COGS comes off a stock layer already net of
+	// creditable PPN (SPEC 3.2), so revenue has to be net of PPN as well or the
+	// subtraction is not comparing like with like. Under inclusive pricing net_idr
+	// contains the tax, and reading it here would overstate every owner's margin by
+	// the PPN rate -- in the report the family settles money on. net_idr is still
+	// selected: it is what the customer paid, and the drill-down shows both.
+	ListSaleLinesForMargin(ctx context.Context, arg ListSaleLinesForMarginParams) ([]ListSaleLinesForMarginRow, error)
 	ListSalePayments(ctx context.Context, saleID string) ([]SalePayment, error)
 	ListSaleReturns(ctx context.Context, saleID string) ([]SaleReturn, error)
+	// The tax breakdown of one sale, for the receipt and for anyone asking why a
+	// figure is what it is. Reads the snapshot, never the current rule.
+	ListSaleTax(ctx context.Context, saleID string) ([]ListSaleTaxRow, error)
 	ListSales(ctx context.Context, arg ListSalesParams) ([]Sale, error)
+	// Finalised sales only. A void says the sale did not happen (R12.3): its
+	// reversals share the sale's movement id, so a voided sale would net to nothing
+	// and still put a phantom row in the drill-down.
+	ListSalesForMargin(ctx context.Context, arg ListSalesForMarginParams) ([]ListSalesForMarginRow, error)
+	// The sales behind an output PPN figure, so every number on the position report
+	// decomposes into the transactions that made it.
+	ListSalesForPPN(ctx context.Context, arg ListSalesForPPNParams) ([]ListSalesForPPNRow, error)
 	// Everything currently on hand in one company, grouped the way a count is
 	// taken: per product, per owner. This is what the count sheet is generated
 	// from and what system_qty is snapshotted from.
 	ListStockOnHandByOwner(ctx context.Context, entityID string) ([]ListStockOnHandByOwnerRow, error)
 	ListSuppliers(ctx context.Context, includeInactive interface{}) ([]Supplier, error)
+	// Tax rules, the sale-time snapshot, and the PPN position.
+	// TASKS 5.1, 5.8, 5.9, 5.10. SPEC 2.1, 2.3, 2.4.
+	// Keep this file ASCII-only -- see README.
+	//
+	// Nothing here computes a rate. These queries read config rows and write
+	// snapshots; the arithmetic is internal/domain/tax, which is where it can be
+	// tested against worked examples (INV-4).
+	//
+	// A rate is never UPDATEd. CloseTaxRule sets valid_to and nothing else, and the
+	// trigger in migration 012 refuses any other edit.
+	ListTaxRules(ctx context.Context, entityID string) ([]TaxRule, error)
+	// Every rule the entity has ever had, for the engine to select from by business
+	// date. Loaded whole rather than filtered in SQL: the effective-dated selection
+	// and its overlap check live in domain/tax, where they are tested, and at two
+	// rules per tax type there is nothing to optimise.
+	ListTaxRulesForEntity(ctx context.Context, arg ListTaxRulesForEntityParams) ([]TaxRule, error)
+	ListTransferLines(ctx context.Context, transferID string) ([]ListTransferLinesRow, error)
+	// Both sides of the boundary see it. A transfer is one document belonging to
+	// two companies, so it is listed for either.
+	ListTransfers(ctx context.Context, entityID string) ([]ListTransfersRow, error)
 	ListUsers(ctx context.Context) ([]AppUser, error)
 	MarkOpnamePosted(ctx context.Context, arg MarkOpnamePostedParams) (StockOpname, error)
 	// Sales, cash sessions, returns and voids. TASKS 2.1-2.10.
@@ -172,6 +326,22 @@ type Querier interface {
 	// VOID, and the trigger in migration 009 refuses anything else.
 	// Keep this file ASCII-only -- see README.
 	OpenCashSession(ctx context.Context, arg OpenCashSessionParams) (CashSession, error)
+	// --- hutang and piutang (TASKS 6.4-6.5, R5.5-5.6, R5.8) ---------------------
+	// Everything still owed, with the counterparty named. Aging happens in
+	// internal/domain/aging: which bucket a document falls in depends on rules --
+	// what an absent due date means, what "overdue" means on the due date itself --
+	// and those belong somewhere they can be tested exhaustively, not in a CASE
+	// expression nobody can write a test against.
+	OutstandingPayablesForAging(ctx context.Context, entityID string) ([]OutstandingPayablesForAgingRow, error)
+	OutstandingReceivablesForAging(ctx context.Context, entityID string) ([]OutstandingReceivablesForAgingRow, error)
+	PurchaseReturnSummary(ctx context.Context, arg PurchaseReturnSummaryParams) (PurchaseReturnSummaryRow, error)
+	PurchasesByProduct(ctx context.Context, arg PurchasesByProductParams) ([]PurchasesByProductRow, error)
+	// Supplier comparison, which is R10.6's whole point: the same goods from a
+	// supplier who issues a faktur cost ~11% less in real terms at a PKP company,
+	// and that difference is invisible on an invoice.
+	PurchasesBySupplier(ctx context.Context, arg PurchasesBySupplierParams) ([]PurchasesBySupplierRow, error)
+	// --- purchases (TASKS 6.2, R5.3) --------------------------------------------
+	PurchasesSummary(ctx context.Context, arg PurchasesSummaryParams) (PurchasesSummaryRow, error)
 	RecordConsumption(ctx context.Context, arg RecordConsumptionParams) (StockConsumption, error)
 	RecordPayablePayment(ctx context.Context, arg RecordPayablePaymentParams) (PayablePayment, error)
 	RecordReceivablePayment(ctx context.Context, arg RecordReceivablePaymentParams) (ReceivablePayment, error)
@@ -179,12 +349,89 @@ type Querier interface {
 	// Frees claims abandoned by a crash, so a retry is not blocked forever.
 	ReleaseStaleClaims(ctx context.Context, olderThan int64) error
 	RevokeRole(ctx context.Context, arg RevokeRoleParams) error
+	SalesByDay(ctx context.Context, arg SalesByDayParams) ([]SalesByDayRow, error)
+	// R9.10: non-cash methods are recorded, not processed. This is what makes the
+	// recording worth anything -- how the shop is actually being paid.
+	SalesByPaymentMethod(ctx context.Context, arg SalesByPaymentMethodParams) ([]SalesByPaymentMethodRow, error)
+	// What actually sold, best first. The owner's question is which products move,
+	// and revenue is the DPP for the same reason it is on the margin report: cost
+	// is already net of creditable PPN (SPEC 3.2), so revenue has to be too.
+	SalesByProduct(ctx context.Context, arg SalesByProductParams) ([]SalesByProductRow, error)
+	SalesReturnSummary(ctx context.Context, arg SalesReturnSummaryParams) (SalesReturnSummaryRow, error)
+	// Sales, purchases and stock reports. TASKS 6.1-6.3, R5.2-5.4, R5.7.
+	// Keep this file ASCII-only -- see README.
+	//
+	// R5.7 is the user's own framing: reports can start simple provided the raw
+	// data can be pulled. So these are honest roll-ups over a date range with a
+	// drill-down to the documents underneath, and nothing more clever than that.
+	// The export (TASKS 6.6) is what carries the fidelity requirement.
+	//
+	// Unlike margin.sql, these aggregate in SQL. That file sums in Go because a
+	// margin figure is settled on between family members and every step has to be
+	// testable; a period total on a sales report is a sum of stored figures that
+	// are themselves already checked, and reimplementing SUM in Go would add a
+	// place for the two to disagree rather than remove one.
+	//
+	// Voided sales are excluded everywhere. A void says the sale did not happen.
+	// --- sales (TASKS 6.1, R5.4) ------------------------------------------------
+	SalesSummary(ctx context.Context, arg SalesSummaryParams) (SalesSummaryRow, error)
+	// Voids are counted, not hidden. A day with eleven voids is a training problem
+	// or a till problem, and it is invisible on a report that only shows what
+	// stuck.
+	SalesVoidSummary(ctx context.Context, arg SalesVoidSummaryParams) (SalesVoidSummaryRow, error)
 	SetUserActive(ctx context.Context, arg SetUserActiveParams) error
 	SetUserPassword(ctx context.Context, arg SetUserPasswordParams) error
+	// Stock arriving in the period, by reason: bought, transferred in, adjusted up,
+	// or carried in at go-live.
+	StockIntakeByProduct(ctx context.Context, arg StockIntakeByProductParams) ([]StockIntakeByProductRow, error)
+	// Everything that moved in the period, by product and reason.
+	//
+	// qty_out is signed on purpose: a sales return is a negative draw against the
+	// layer it came from (D-010), so summing without regard to sign would report
+	// goods leaving twice.
+	StockMovementByProduct(ctx context.Context, arg StockMovementByProductParams) ([]StockMovementByProductRow, error)
+	// --- stock (TASKS 6.3, R5.2) ------------------------------------------------
+	// What is on the shelf, per product per owner, and what it is worth.
+	//
+	// Value multiplies before it divides -- cost_total x remaining / qty_in, not a
+	// rounded unit cost times a count, which loses rupiah on every layer (SPEC 1).
+	//
+	// The division truncates, so a layer that does not divide evenly is worth up to
+	// a rupiah less here than the sum of what its units will actually cost. That is
+	// acceptable and it is only true of this figure: a valuation is an estimate of
+	// stock nobody has sold yet, and the authoritative cost of any unit is decided
+	// when it is drawn, by internal/domain/fifo, where the remainder is carried and
+	// the last draw absorbs it. Nothing settles money on this column.
+	//
+	// Owner is on the row because stock is owner-attributed and a total that mixes
+	// two family members' goods is not a figure either of them can use (INV-8).
+	StockOnHand(ctx context.Context, entityID string) ([]StockOnHandRow, error)
+	// Products with stock nowhere in this company. Not the same question as "what
+	// is on the shelf" and it is the one that costs a sale: a catalogue entry the
+	// cashier can scan and cannot sell.
+	StockOutOfStock(ctx context.Context, entityID string) ([]StockOutOfStockRow, error)
 	// The input side of the PPN position (SPEC 2.4): purchases WHERE the faktur was
 	// received. Purchases without one contribute nothing here -- their PPN went
 	// into the cost layer instead. The filter is the whole point of the report.
 	SumCreditableInputPPN(ctx context.Context, arg SumCreditableInputPPNParams) (int64, error)
+	// PPN paid to suppliers that no faktur ever arrived for.
+	//
+	// Reported so the figure is visible and never netted into the credit. It is
+	// cost, and it is already sitting in the stock layers (SPEC 3.2) -- crediting
+	// it here as well would claim the same rupiah twice, once against output PPN
+	// and once as a lower COGS in the margin the family settles on.
+	SumNonCreditableInputPPN(ctx context.Context, arg SumNonCreditableInputPPNParams) (int64, error)
+	// --- the PPN position (SPEC 2.4) --------------------------------------------
+	// Output PPN for a masa pajak, split by whether a faktur was issued.
+	//
+	// The split is TASKS 5.4 made visible. A PKP owes output PPN on the delivery of
+	// taxable goods whether or not the buyer took a faktur, so the without-faktur
+	// column is a real liability with no document anywhere to remind anyone it
+	// exists. Summed into one figure it disappears; on its own line it is the
+	// number a newly registered business is surprised by.
+	//
+	// Voided sales are excluded: a void says the sale did not happen.
+	SumOutputPPN(ctx context.Context, arg SumOutputPPNParams) (SumOutputPPNRow, error)
 	// How much of one purchase line has already gone back, so a second return
 	// cannot send back more than ever arrived.
 	SumReturnedForPurchaseLine(ctx context.Context, purchaseLineID string) (int64, error)
@@ -198,6 +445,9 @@ type Querier interface {
 	// Input PPN handed back when goods went back to the supplier (R12.2). Netted
 	// off the figure above; claiming credit on returned goods is the error.
 	SumReversedInputPPN(ctx context.Context, arg SumReversedInputPPNParams) (int64, error)
+	// Output PPN given back by sales returns, counted in the month the goods came
+	// back. Mirrors SumReversedInputPPN on the purchase side.
+	SumReversedOutputPPN(ctx context.Context, arg SumReversedOutputPPNParams) (int64, error)
 	SumSessionCashRefunds(ctx context.Context, cashSessionID *string) (int64, error)
 	// The Z-report figures for one session: cash taken in, by method, plus what
 	// went back out as cash refunds. Voided sales are excluded -- a void means the
@@ -209,6 +459,11 @@ type Querier interface {
 	UpdateOwner(ctx context.Context, arg UpdateOwnerParams) (Owner, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 	UpdateSupplier(ctx context.Context, arg UpdateSupplierParams) (Supplier, error)
+	// A row here means a person chose; no row means the default (D-012). The rule
+	// is written whole rather than patched, so one row is one decision.
+	UpsertMarginSetting(ctx context.Context, arg UpsertMarginSettingParams) (MarginSetting, error)
+	// A row means somebody chose; no row means the default (SPEC 5.4).
+	UpsertOmzetSetting(ctx context.Context, arg UpsertOmzetSettingParams) (OmzetSetting, error)
 	UpsertOpnameLine(ctx context.Context, arg UpsertOpnameLineParams) (StockOpnameLine, error)
 	// The only UPDATE on sale, and the trigger allows no other shape.
 	VoidSale(ctx context.Context, arg VoidSaleParams) (Sale, error)

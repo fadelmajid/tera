@@ -86,15 +86,17 @@ const createSale = `-- name: CreateSale :one
 INSERT INTO sale (
     id, entity_id, cash_session_id, customer_id, invoice_no, occurred_at,
     business_date, status, faktur_issued, faktur_no, gross_idr, discount_idr,
-    ppn_idr, total_idr, cogs_idr, is_credit, due_date, note, created_by, created_at
+    dpp_idr, ppn_idr, ppn_inclusive, total_idr, cogs_idr, is_credit, due_date,
+    note, created_by, created_at
 ) VALUES (
     ?1, ?2, ?3, ?4,
     ?5, ?6, ?7, 'FINAL',
     ?8, ?9, ?10, ?11,
     ?12, ?13, ?14, ?15,
-    ?16, ?17, ?18, ?19
+    ?16, ?17,
+    ?18, ?19, ?20, ?21
 )
-RETURNING id, entity_id, cash_session_id, customer_id, invoice_no, occurred_at, business_date, status, voided_at, voided_by, void_reason, faktur_issued, faktur_no, gross_idr, discount_idr, ppn_idr, total_idr, cogs_idr, is_credit, due_date, note, created_by, created_at
+RETURNING id, entity_id, cash_session_id, customer_id, invoice_no, occurred_at, business_date, status, voided_at, voided_by, void_reason, faktur_issued, faktur_no, gross_idr, discount_idr, dpp_idr, ppn_idr, ppn_inclusive, total_idr, cogs_idr, is_credit, due_date, note, created_by, created_at
 `
 
 type CreateSaleParams struct {
@@ -109,7 +111,9 @@ type CreateSaleParams struct {
 	FakturNo      *string
 	GrossIdr      int64
 	DiscountIdr   int64
+	DppIdr        int64
 	PpnIdr        int64
+	PpnInclusive  int64
 	TotalIdr      int64
 	CogsIdr       int64
 	IsCredit      int64
@@ -119,6 +123,9 @@ type CreateSaleParams struct {
 	CreatedAt     int64
 }
 
+// dpp_idr and ppn_idr come from domain/tax and the table CHECKs that they sum
+// to total_idr (SPEC 2.2). ppn_inclusive is snapshotted from the rule that
+// priced the sale, so a receipt reprinted next year breaks down the same way.
 func (q *Queries) CreateSale(ctx context.Context, arg CreateSaleParams) (Sale, error) {
 	row := q.db.QueryRowContext(ctx, createSale,
 		arg.ID,
@@ -132,7 +139,9 @@ func (q *Queries) CreateSale(ctx context.Context, arg CreateSaleParams) (Sale, e
 		arg.FakturNo,
 		arg.GrossIdr,
 		arg.DiscountIdr,
+		arg.DppIdr,
 		arg.PpnIdr,
+		arg.PpnInclusive,
 		arg.TotalIdr,
 		arg.CogsIdr,
 		arg.IsCredit,
@@ -158,7 +167,9 @@ func (q *Queries) CreateSale(ctx context.Context, arg CreateSaleParams) (Sale, e
 		&i.FakturNo,
 		&i.GrossIdr,
 		&i.DiscountIdr,
+		&i.DppIdr,
 		&i.PpnIdr,
+		&i.PpnInclusive,
 		&i.TotalIdr,
 		&i.CogsIdr,
 		&i.IsCredit,
@@ -173,14 +184,15 @@ func (q *Queries) CreateSale(ctx context.Context, arg CreateSaleParams) (Sale, e
 const createSaleLine = `-- name: CreateSaleLine :one
 INSERT INTO sale_line (
     id, sale_id, product_id, owner_id, qty, unit_price_idr, gross_idr,
-    line_discount_idr, alloc_discount_idr, net_idr, cogs_idr, created_at
+    line_discount_idr, alloc_discount_idr, net_idr, dpp_idr, ppn_idr,
+    cogs_idr, created_at
 ) VALUES (
     ?1, ?2, ?3, ?4,
     ?5, ?6, ?7,
     ?8, ?9, ?10,
-    ?11, ?12
+    ?11, ?12, ?13, ?14
 )
-RETURNING id, sale_id, product_id, owner_id, qty, unit_price_idr, gross_idr, line_discount_idr, alloc_discount_idr, net_idr, cogs_idr, created_at
+RETURNING id, sale_id, product_id, owner_id, qty, unit_price_idr, gross_idr, line_discount_idr, alloc_discount_idr, net_idr, dpp_idr, ppn_idr, cogs_idr, created_at
 `
 
 type CreateSaleLineParams struct {
@@ -194,10 +206,15 @@ type CreateSaleLineParams struct {
 	LineDiscountIdr  int64
 	AllocDiscountIdr int64
 	NetIdr           int64
+	DppIdr           int64
+	PpnIdr           int64
 	CogsIdr          int64
 	CreatedAt        int64
 }
 
+// dpp_idr is this line's revenue for the margin report: COGS is already net of
+// creditable PPN (SPEC 3.2), so revenue has to be too or the two do not
+// compare. Under inclusive pricing net_idr contains the tax.
 func (q *Queries) CreateSaleLine(ctx context.Context, arg CreateSaleLineParams) (SaleLine, error) {
 	row := q.db.QueryRowContext(ctx, createSaleLine,
 		arg.ID,
@@ -210,6 +227,8 @@ func (q *Queries) CreateSaleLine(ctx context.Context, arg CreateSaleLineParams) 
 		arg.LineDiscountIdr,
 		arg.AllocDiscountIdr,
 		arg.NetIdr,
+		arg.DppIdr,
+		arg.PpnIdr,
 		arg.CogsIdr,
 		arg.CreatedAt,
 	)
@@ -225,6 +244,8 @@ func (q *Queries) CreateSaleLine(ctx context.Context, arg CreateSaleLineParams) 
 		&i.LineDiscountIdr,
 		&i.AllocDiscountIdr,
 		&i.NetIdr,
+		&i.DppIdr,
+		&i.PpnIdr,
 		&i.CogsIdr,
 		&i.CreatedAt,
 	)
@@ -271,14 +292,15 @@ func (q *Queries) CreateSalePayment(ctx context.Context, arg CreateSalePaymentPa
 const createSaleReturn = `-- name: CreateSaleReturn :one
 INSERT INTO sale_return (
     id, entity_id, sale_id, occurred_at, business_date, sale_business_date,
-    reason, refund_idr, cogs_reversed_idr, refund_method, created_by, created_at
+    reason, refund_idr, cogs_reversed_idr, ppn_reversed_idr, refund_method,
+    created_by, created_at
 ) VALUES (
     ?1, ?2, ?3, ?4,
     ?5, ?6, ?7,
     ?8, ?9, ?10,
-    ?11, ?12
+    ?11, ?12, ?13
 )
-RETURNING id, entity_id, sale_id, occurred_at, business_date, sale_business_date, reason, refund_idr, cogs_reversed_idr, refund_method, created_by, created_at
+RETURNING id, entity_id, sale_id, occurred_at, business_date, sale_business_date, reason, refund_idr, cogs_reversed_idr, refund_method, created_by, created_at, ppn_reversed_idr
 `
 
 type CreateSaleReturnParams struct {
@@ -291,11 +313,16 @@ type CreateSaleReturnParams struct {
 	Reason           string
 	RefundIdr        int64
 	CogsReversedIdr  int64
+	PpnReversedIdr   int64
 	RefundMethod     string
 	CreatedBy        *string
 	CreatedAt        int64
 }
 
+// ppn_reversed_idr is output PPN handed back, prorated from the snapshot on the
+// original sale rather than recomputed against today's rate (INV-3). It nets
+// against output PPN in the position report, exactly as a purchase return nets
+// against creditable input.
 func (q *Queries) CreateSaleReturn(ctx context.Context, arg CreateSaleReturnParams) (SaleReturn, error) {
 	row := q.db.QueryRowContext(ctx, createSaleReturn,
 		arg.ID,
@@ -307,6 +334,7 @@ func (q *Queries) CreateSaleReturn(ctx context.Context, arg CreateSaleReturnPara
 		arg.Reason,
 		arg.RefundIdr,
 		arg.CogsReversedIdr,
+		arg.PpnReversedIdr,
 		arg.RefundMethod,
 		arg.CreatedBy,
 		arg.CreatedAt,
@@ -325,18 +353,21 @@ func (q *Queries) CreateSaleReturn(ctx context.Context, arg CreateSaleReturnPara
 		&i.RefundMethod,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.PpnReversedIdr,
 	)
 	return i, err
 }
 
 const createSaleReturnLine = `-- name: CreateSaleReturnLine :one
 INSERT INTO sale_return_line (
-    id, sale_return_id, sale_line_id, qty, refund_idr, cogs_reversed_idr, created_at
+    id, sale_return_id, sale_line_id, qty, refund_idr, cogs_reversed_idr,
+    ppn_reversed_idr, created_at
 ) VALUES (
     ?1, ?2, ?3, ?4,
-    ?5, ?6, ?7
+    ?5, ?6, ?7,
+    ?8
 )
-RETURNING id, sale_return_id, sale_line_id, qty, refund_idr, cogs_reversed_idr, created_at
+RETURNING id, sale_return_id, sale_line_id, qty, refund_idr, cogs_reversed_idr, created_at, ppn_reversed_idr
 `
 
 type CreateSaleReturnLineParams struct {
@@ -346,6 +377,7 @@ type CreateSaleReturnLineParams struct {
 	Qty             int64
 	RefundIdr       int64
 	CogsReversedIdr int64
+	PpnReversedIdr  int64
 	CreatedAt       int64
 }
 
@@ -357,6 +389,7 @@ func (q *Queries) CreateSaleReturnLine(ctx context.Context, arg CreateSaleReturn
 		arg.Qty,
 		arg.RefundIdr,
 		arg.CogsReversedIdr,
+		arg.PpnReversedIdr,
 		arg.CreatedAt,
 	)
 	var i SaleReturnLine
@@ -368,6 +401,7 @@ func (q *Queries) CreateSaleReturnLine(ctx context.Context, arg CreateSaleReturn
 		&i.RefundIdr,
 		&i.CogsReversedIdr,
 		&i.CreatedAt,
+		&i.PpnReversedIdr,
 	)
 	return i, err
 }
@@ -428,7 +462,7 @@ func (q *Queries) GetOpenCashSession(ctx context.Context, entityID string) (Cash
 }
 
 const getSale = `-- name: GetSale :one
-SELECT id, entity_id, cash_session_id, customer_id, invoice_no, occurred_at, business_date, status, voided_at, voided_by, void_reason, faktur_issued, faktur_no, gross_idr, discount_idr, ppn_idr, total_idr, cogs_idr, is_credit, due_date, note, created_by, created_at FROM sale WHERE id = ?1
+SELECT id, entity_id, cash_session_id, customer_id, invoice_no, occurred_at, business_date, status, voided_at, voided_by, void_reason, faktur_issued, faktur_no, gross_idr, discount_idr, dpp_idr, ppn_idr, ppn_inclusive, total_idr, cogs_idr, is_credit, due_date, note, created_by, created_at FROM sale WHERE id = ?1
 `
 
 func (q *Queries) GetSale(ctx context.Context, id string) (Sale, error) {
@@ -450,7 +484,9 @@ func (q *Queries) GetSale(ctx context.Context, id string) (Sale, error) {
 		&i.FakturNo,
 		&i.GrossIdr,
 		&i.DiscountIdr,
+		&i.DppIdr,
 		&i.PpnIdr,
+		&i.PpnInclusive,
 		&i.TotalIdr,
 		&i.CogsIdr,
 		&i.IsCredit,
@@ -463,7 +499,7 @@ func (q *Queries) GetSale(ctx context.Context, id string) (Sale, error) {
 }
 
 const getSaleByInvoiceNo = `-- name: GetSaleByInvoiceNo :one
-SELECT id, entity_id, cash_session_id, customer_id, invoice_no, occurred_at, business_date, status, voided_at, voided_by, void_reason, faktur_issued, faktur_no, gross_idr, discount_idr, ppn_idr, total_idr, cogs_idr, is_credit, due_date, note, created_by, created_at FROM sale WHERE entity_id = ?1 AND invoice_no = ?2
+SELECT id, entity_id, cash_session_id, customer_id, invoice_no, occurred_at, business_date, status, voided_at, voided_by, void_reason, faktur_issued, faktur_no, gross_idr, discount_idr, dpp_idr, ppn_idr, ppn_inclusive, total_idr, cogs_idr, is_credit, due_date, note, created_by, created_at FROM sale WHERE entity_id = ?1 AND invoice_no = ?2
 `
 
 type GetSaleByInvoiceNoParams struct {
@@ -490,7 +526,9 @@ func (q *Queries) GetSaleByInvoiceNo(ctx context.Context, arg GetSaleByInvoiceNo
 		&i.FakturNo,
 		&i.GrossIdr,
 		&i.DiscountIdr,
+		&i.DppIdr,
 		&i.PpnIdr,
+		&i.PpnInclusive,
 		&i.TotalIdr,
 		&i.CogsIdr,
 		&i.IsCredit,
@@ -503,7 +541,7 @@ func (q *Queries) GetSaleByInvoiceNo(ctx context.Context, arg GetSaleByInvoiceNo
 }
 
 const getSaleLine = `-- name: GetSaleLine :one
-SELECT id, sale_id, product_id, owner_id, qty, unit_price_idr, gross_idr, line_discount_idr, alloc_discount_idr, net_idr, cogs_idr, created_at FROM sale_line WHERE id = ?1
+SELECT id, sale_id, product_id, owner_id, qty, unit_price_idr, gross_idr, line_discount_idr, alloc_discount_idr, net_idr, dpp_idr, ppn_idr, cogs_idr, created_at FROM sale_line WHERE id = ?1
 `
 
 func (q *Queries) GetSaleLine(ctx context.Context, id string) (SaleLine, error) {
@@ -520,6 +558,8 @@ func (q *Queries) GetSaleLine(ctx context.Context, id string) (SaleLine, error) 
 		&i.LineDiscountIdr,
 		&i.AllocDiscountIdr,
 		&i.NetIdr,
+		&i.DppIdr,
+		&i.PpnIdr,
 		&i.CogsIdr,
 		&i.CreatedAt,
 	)
@@ -711,7 +751,7 @@ func (q *Queries) ListSaleConsumptions(ctx context.Context, movementID string) (
 
 const listSaleLines = `-- name: ListSaleLines :many
 SELECT
-    l.id, l.sale_id, l.product_id, l.owner_id, l.qty, l.unit_price_idr, l.gross_idr, l.line_discount_idr, l.alloc_discount_idr, l.net_idr, l.cogs_idr, l.created_at,
+    l.id, l.sale_id, l.product_id, l.owner_id, l.qty, l.unit_price_idr, l.gross_idr, l.line_discount_idr, l.alloc_discount_idr, l.net_idr, l.dpp_idr, l.ppn_idr, l.cogs_idr, l.created_at,
     p.code AS product_code,
     p.name AS product_name,
     p.unit AS product_unit,
@@ -734,6 +774,8 @@ type ListSaleLinesRow struct {
 	LineDiscountIdr  int64
 	AllocDiscountIdr int64
 	NetIdr           int64
+	DppIdr           int64
+	PpnIdr           int64
 	CogsIdr          int64
 	CreatedAt        int64
 	ProductCode      string
@@ -762,6 +804,8 @@ func (q *Queries) ListSaleLines(ctx context.Context, saleID string) ([]ListSaleL
 			&i.LineDiscountIdr,
 			&i.AllocDiscountIdr,
 			&i.NetIdr,
+			&i.DppIdr,
+			&i.PpnIdr,
 			&i.CogsIdr,
 			&i.CreatedAt,
 			&i.ProductCode,
@@ -817,7 +861,7 @@ func (q *Queries) ListSalePayments(ctx context.Context, saleID string) ([]SalePa
 }
 
 const listSaleReturns = `-- name: ListSaleReturns :many
-SELECT id, entity_id, sale_id, occurred_at, business_date, sale_business_date, reason, refund_idr, cogs_reversed_idr, refund_method, created_by, created_at FROM sale_return WHERE sale_id = ?1 ORDER BY occurred_at, id
+SELECT id, entity_id, sale_id, occurred_at, business_date, sale_business_date, reason, refund_idr, cogs_reversed_idr, refund_method, created_by, created_at, ppn_reversed_idr FROM sale_return WHERE sale_id = ?1 ORDER BY occurred_at, id
 `
 
 func (q *Queries) ListSaleReturns(ctx context.Context, saleID string) ([]SaleReturn, error) {
@@ -842,6 +886,7 @@ func (q *Queries) ListSaleReturns(ctx context.Context, saleID string) ([]SaleRet
 			&i.RefundMethod,
 			&i.CreatedBy,
 			&i.CreatedAt,
+			&i.PpnReversedIdr,
 		); err != nil {
 			return nil, err
 		}
@@ -857,7 +902,7 @@ func (q *Queries) ListSaleReturns(ctx context.Context, saleID string) ([]SaleRet
 }
 
 const listSales = `-- name: ListSales :many
-SELECT id, entity_id, cash_session_id, customer_id, invoice_no, occurred_at, business_date, status, voided_at, voided_by, void_reason, faktur_issued, faktur_no, gross_idr, discount_idr, ppn_idr, total_idr, cogs_idr, is_credit, due_date, note, created_by, created_at FROM sale
+SELECT id, entity_id, cash_session_id, customer_id, invoice_no, occurred_at, business_date, status, voided_at, voided_by, void_reason, faktur_issued, faktur_no, gross_idr, discount_idr, dpp_idr, ppn_idr, ppn_inclusive, total_idr, cogs_idr, is_credit, due_date, note, created_by, created_at FROM sale
 WHERE entity_id = ?1
   AND business_date >= ?2
   AND business_date <= ?3
@@ -895,7 +940,9 @@ func (q *Queries) ListSales(ctx context.Context, arg ListSalesParams) ([]Sale, e
 			&i.FakturNo,
 			&i.GrossIdr,
 			&i.DiscountIdr,
+			&i.DppIdr,
 			&i.PpnIdr,
+			&i.PpnInclusive,
 			&i.TotalIdr,
 			&i.CogsIdr,
 			&i.IsCredit,
@@ -1056,7 +1103,7 @@ SET status = 'VOID',
     voided_by = ?2,
     void_reason = ?3
 WHERE id = ?4 AND status = 'FINAL'
-RETURNING id, entity_id, cash_session_id, customer_id, invoice_no, occurred_at, business_date, status, voided_at, voided_by, void_reason, faktur_issued, faktur_no, gross_idr, discount_idr, ppn_idr, total_idr, cogs_idr, is_credit, due_date, note, created_by, created_at
+RETURNING id, entity_id, cash_session_id, customer_id, invoice_no, occurred_at, business_date, status, voided_at, voided_by, void_reason, faktur_issued, faktur_no, gross_idr, discount_idr, dpp_idr, ppn_idr, ppn_inclusive, total_idr, cogs_idr, is_credit, due_date, note, created_by, created_at
 `
 
 type VoidSaleParams struct {
@@ -1091,7 +1138,9 @@ func (q *Queries) VoidSale(ctx context.Context, arg VoidSaleParams) (Sale, error
 		&i.FakturNo,
 		&i.GrossIdr,
 		&i.DiscountIdr,
+		&i.DppIdr,
 		&i.PpnIdr,
+		&i.PpnInclusive,
 		&i.TotalIdr,
 		&i.CogsIdr,
 		&i.IsCredit,
