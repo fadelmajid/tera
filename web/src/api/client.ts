@@ -37,9 +37,40 @@ export interface RequestOptions {
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
-/** Mints an idempotency key. Lowercase canonical UUID, as the server requires. */
+/**
+ * Mints an idempotency key. Lowercase canonical UUID, as the server requires.
+ *
+ * `crypto.randomUUID()` exists only in a *secure context* — HTTPS, or localhost.
+ * Tera is a LAN server serving plain HTTP to every other machine in the shop
+ * (ARCHITECTURE §1: bind 0.0.0.0:8080, everyone opens a URL), so on every client
+ * except the one running the server it is `undefined`.
+ *
+ * Every mutating call carries one of these (INV-6), so calling it threw a
+ * TypeError before `fetch` was ever reached — which surfaced as "tidak dapat
+ * terhubung ke server" while the server was perfectly healthy and had no record
+ * of the request. Nothing that writes worked from the shop floor: no sale, no
+ * purchase, not even signing in.
+ *
+ * `crypto.getRandomValues()` carries no secure-context restriction and is the
+ * same CSPRNG, so the v4 below is generated the same way — it is only the
+ * convenience wrapper that is unavailable.
+ */
 export function newRequestId(): string {
-  return crypto.randomUUID().toLowerCase()
+  const c = globalThis.crypto
+  if (typeof c?.randomUUID === 'function') return c.randomUUID().toLowerCase()
+
+  const b = new Uint8Array(16)
+  c.getRandomValues(b)
+  b[6] = ((b[6] ?? 0) & 0x0f) | 0x40 // version 4
+  b[8] = ((b[8] ?? 0) & 0x3f) | 0x80 // variant 10xx
+  const hex = Array.from(b, (n) => n.toString(16).padStart(2, '0'))
+  return [
+    hex.slice(0, 4).join(''),
+    hex.slice(4, 6).join(''),
+    hex.slice(6, 8).join(''),
+    hex.slice(8, 10).join(''),
+    hex.slice(10, 16).join(''),
+  ].join('-')
 }
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
