@@ -461,14 +461,15 @@ func (s *Sales) Ring(ctx context.Context, actor Actor, in SaleInput) (SaleResult
 					// on the shelf, so "out of stock" in front of a full shelf
 					// is an answer rather than a bug report.
 					if short.OtherOwnersAvailable > 0 {
-						return fmt.Errorf(
-							"%w: %s baris %d: stok %s tinggal %d, diminta %d (%d unit lagi ada tetapi milik pemilik lain dan tidak boleh dipakai)",
-							ErrInsufficientStock, pl.productName, i+1, ownerLabel(pl.ownerName),
-							short.Available, short.Requested, short.OtherOwnersAvailable)
+						return pesankan(ErrInsufficientStock, fmt.Sprintf(
+							"%s baris %d: stok %s tinggal %d, diminta %d (%d unit lagi ada tapi punya owner lain dan tidak boleh dipakai)",
+							pl.productName, i+1, ownerLabel(pl.ownerName),
+							short.Available, short.Requested, short.OtherOwnersAvailable))
 					}
-					return fmt.Errorf("%w: %s baris %d: stok %s tinggal %d, diminta %d",
-						ErrInsufficientStock, pl.productName, i+1, ownerLabel(pl.ownerName),
-						short.Available, short.Requested)
+					return pesankan(ErrInsufficientStock, fmt.Sprintf(
+						"%s baris %d: stok %s tinggal %d, diminta %d",
+						pl.productName, i+1, ownerLabel(pl.ownerName),
+						short.Available, short.Requested))
 				}
 				return err
 			}

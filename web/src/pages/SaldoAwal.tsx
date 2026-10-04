@@ -105,7 +105,7 @@ function StokAwal({ entityId }: { entityId: string }) {
       setNilai('')
       produk.setGalat(null)
     } catch (err) {
-      produk.setGalat(err instanceof ApiError ? err.message : 'Nilai rupiah harus bilangan bulat')
+      produk.setGalat(err instanceof ApiError ? err.message : 'Nilai rupiah harus angka bulat')
     } finally {
       setSedang(false)
     }
@@ -277,7 +277,7 @@ function DaftarSaldo({
       setInvoice('')
       daftar.muatUlang()
     } catch (err) {
-      daftar.setGalat(err instanceof ApiError ? err.message : 'Nilai rupiah harus bilangan bulat')
+      daftar.setGalat(err instanceof ApiError ? err.message : 'Nilai rupiah harus angka bulat')
     } finally {
       setSedang(false)
     }

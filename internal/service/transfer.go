@@ -192,14 +192,15 @@ func (s *Transfers) plan(
 				// Budi's goods never quietly draws Sari's, and the message says
 				// so rather than reading like a bug with a full shelf in view.
 				if short.OtherOwnersAvailable > 0 {
-					return nil, fmt.Errorf(
-						"%w: %s baris %d: stok %s tinggal %d, diminta %d (%d unit lagi ada tetapi milik pemilik lain dan tidak boleh dipakai)",
-						ErrInsufficientStock, product.Name, i+1, ownerLabel(ownerName),
-						short.Available, short.Requested, short.OtherOwnersAvailable)
+					return nil, pesankan(ErrInsufficientStock, fmt.Sprintf(
+						"%s baris %d: stok %s tinggal %d, diminta %d (%d unit lagi ada tapi punya owner lain dan tidak boleh dipakai)",
+						product.Name, i+1, ownerLabel(ownerName),
+						short.Available, short.Requested, short.OtherOwnersAvailable))
 				}
-				return nil, fmt.Errorf("%w: %s baris %d: stok %s tinggal %d, diminta %d",
-					ErrInsufficientStock, product.Name, i+1, ownerLabel(ownerName),
-					short.Available, short.Requested)
+				return nil, pesankan(ErrInsufficientStock, fmt.Sprintf(
+					"%s baris %d: stok %s tinggal %d, diminta %d",
+					product.Name, i+1, ownerLabel(ownerName),
+					short.Available, short.Requested))
 			}
 			return nil, err
 		}

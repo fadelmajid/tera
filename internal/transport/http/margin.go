@@ -16,9 +16,9 @@ import (
 // would be planning around a number that does not exist (REQUIREMENTS §5).
 const (
 	reportTitle = "Laporan Margin per Owner"
-	reportNote  = "Margin kotor: pendapatan dikurangi HPP dari lapisan stok yang benar-benar terpakai. " +
-		"Biaya bersama seperti listrik, gaji, dan sewa TIDAK termasuk dan diselesaikan di luar aplikasi."
-	reportCaveat = "Angka ini bukan laba bersih dan bukan Laba Rugi."
+	reportNote  = "Margin kotor: hasil penjualan dikurangi modal barang (HPP) dari stok yang benar-benar terpakai. " +
+		"Biaya bersama seperti listrik, gaji, dan sewa TIDAK ikut dihitung di sini — itu diatur di luar aplikasi."
+	reportCaveat = "Ini bukan laba bersih, dan bukan Laba Rugi."
 )
 
 // --- wire shapes ------------------------------------------------------------

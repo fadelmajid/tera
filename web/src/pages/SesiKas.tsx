@@ -44,7 +44,7 @@ export function SesiKasPage({ entityId }: { entityId: string }) {
       setZ(tot)
       setGalat(null)
     } catch (err) {
-      setGalat(err instanceof ApiError ? err.message : 'Gagal memuat sesi kas')
+      setGalat(err instanceof ApiError ? err.message : 'Tidak bisa membuka sesi kas')
     } finally {
       setMemuat(false)
     }
@@ -123,7 +123,7 @@ export function SesiKasPage({ entityId }: { entityId: string }) {
                     <strong>Seharusnya di laci</strong>
                     <br />
                     <small className="catatan">
-                      Hanya tunai. Transfer dan QRIS tercatat tetapi tidak ada di laci.
+                      Hanya tunai. Transfer dan QRIS tercatat tapi tidak ada di laci.
                     </small>
                   </td>
                   <td className="angka">
@@ -181,7 +181,7 @@ export function SesiKasPage({ entityId }: { entityId: string }) {
                 className="sekunder"
                 onClick={() => {
                   void openDrawer(entityId).catch((err: unknown) =>
-                    setGalat(err instanceof ApiError ? err.message : 'Gagal membuka laci'),
+                    setGalat(err instanceof ApiError ? err.message : 'Tidak bisa membuka laci'),
                   )
                 }}
               >

@@ -1,19 +1,11 @@
-import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError } from '../api/client'
 import type { Role } from '../api/auth'
 import { canManageUsers } from '../api/auth'
 import { getMarginReport, monthWindow, setReturnRule } from '../api/margin'
-import type {
-  LayerDraw,
-  MarginReport,
-  MarginReturn,
-  MarginSale,
-  OwnerMargin,
-  ProductLine,
-  ReturnPeriodRule,
-} from '../api/margin'
-import { formatIDR } from '../money'
-import { Galat, Memuat, Pemicu, Tabel } from '../components/dasar'
+import type { LayerDraw, MarginReport, ReturnPeriodRule } from '../api/margin'
+import { formatIDR, idr, sub, sum, ZERO, type IDR } from '../money'
+import { Cari, Galat, Memuat, Stat, Tabel, Th, useCari, useUrut } from '../components/dasar'
 import { Konfirmasi } from '../components/Modal'
 
 /**
@@ -46,12 +38,106 @@ import { Konfirmasi } from '../components/Modal'
  * Nothing on this page adds money up. Every rupiah was summed on the server
  * from the actual stock_consumption rows; here it is only formatted.
  */
+
+/**
+ * One row per product sold, with its stock layers alongside it.
+ *
+ * The report arrives as a tree — owner, nota, produk, lapisan — because the
+ * drill-down is a hard requirement (CLAUDE.md: no summary-only views). A tree
+ * of collapsed rows is a poor way to *read* it, though: answering "which sales
+ * had the dearest stock" meant opening every branch by hand. Flattening keeps
+ * every figure and its evidence on screen at once, and lets sorting and
+ * filtering do the work the clicking used to.
+ */
+type Baris = {
+  kunci: string
+  ownerId: string
+  owner: string
+  tanggal: string
+  nota: string
+  jenis: 'Penjualan' | 'Retur' | 'Retur periode lain'
+  /** Context only: a return that came back in another period is excluded from
+   *  every total, and a row that is not counted must say so (SPEC §4.4). */
+  dihitung: boolean
+  produk: string
+  kode: string
+  qty: number
+  pendapatan: IDR
+  hpp: IDR
+  margin: IDR
+  layers: LayerDraw[]
+}
+
+function ratakan(laporan: MarginReport): Baris[] {
+  const out: Baris[] = []
+  for (const o of laporan.owners) {
+    const owner = o.owner_name
+    for (const s of o.sales) {
+      for (const pr of s.products) {
+        out.push({
+          kunci: `s:${s.sale_id}:${pr.product_id}`,
+          ownerId: o.owner_id, owner,
+          tanggal: s.business_date, nota: s.invoice_no,
+          jenis: 'Penjualan', dihitung: true,
+          produk: pr.product_name, kode: pr.product_code,
+          qty: pr.qty, pendapatan: pr.revenue_idr,
+          hpp: pr.cogs_idr, margin: pr.margin_idr,
+          layers: pr.layers,
+        })
+      }
+    }
+    for (const [jenis, daftar, dihitung] of [
+      ['Retur', o.returns, true],
+      ['Retur periode lain', o.later_returns, false],
+    ] as const) {
+      for (const r of daftar ?? []) {
+        for (const pr of r.products) {
+          out.push({
+            kunci: `${jenis}:${r.return_id}:${pr.product_id}`,
+            ownerId: o.owner_id, owner,
+            tanggal: r.business_date, nota: r.sale_invoice_no,
+            jenis, dihitung,
+            produk: pr.product_name, kode: pr.product_code,
+            qty: -pr.qty, pendapatan: sub(ZERO, pr.revenue_idr),
+            hpp: sub(ZERO, pr.cogs_idr), margin: sub(ZERO, pr.margin_idr),
+            layers: pr.layers,
+          })
+        }
+      }
+    }
+  }
+  return out
+}
+
+/** The per-unit cost of each layer a line drew, always visible.
+ *
+ *  This is the column the whole report exists for: the same product in the
+ *  same sale can carry two costs 11% apart, and which one applies depends on
+ *  whether that delivery's faktur arrived (INV-9). Hiding it behind a click
+ *  made the most important figure on the screen the hardest one to reach. */
+function Lapisan({ layers }: { layers: LayerDraw[] }) {
+  if (layers.length === 0) return <span className="catatan">—</span>
+  return (
+    <div className="lapisan-sel">
+      {layers.map((l) => (
+        <div key={l.consumption_id} className="lapisan-baris">
+          <span className="angka">{formatIDR(idr(Math.round(l.cost_idr / Math.max(l.qty, 1))))}</span>
+          <span className="catatan">× {l.qty}</span>
+          <span className={l.faktur_received ? 'lencana lencana-aman' : 'lencana lencana-bahaya'}>
+            {l.faktur_received ? 'faktur' : 'tanpa faktur'}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function MarginPage({ entityId, role }: { entityId: string; role: Role }) {
   const [bulan, setBulan] = useState(() => new Date().toISOString().slice(0, 7))
   const [laporan, setLaporan] = useState<MarginReport | null>(null)
   const [galat, setGalat] = useState<string | null>(null)
   const [memuat, setMemuat] = useState(true)
-  const [terbuka, setTerbuka] = useState<Set<string>>(new Set())
+  const [filterOwner, setFilterOwner] = useState('')
 
   const muat = useCallback(() => {
     const [tahun, bln] = bulan.split('-')
@@ -64,19 +150,42 @@ export function MarginPage({ entityId, role }: { entityId: string; role: Role })
         setGalat(null)
       })
       .catch((err: unknown) =>
-        setGalat(err instanceof ApiError ? err.message : 'Gagal memuat laporan margin'),
+        setGalat(err instanceof ApiError ? err.message : 'Tidak bisa membuka laporan margin'),
       )
       .finally(() => setMemuat(false))
   }, [entityId, bulan])
 
   useEffect(muat, [muat])
 
-  const alih = (kunci: string) =>
-    setTerbuka((sebelum) => {
-      const sesudah = new Set(sebelum)
-      if (!sesudah.delete(kunci)) sesudah.add(kunci)
-      return sesudah
-    })
+  // Rows are derived once per report, then sorted and filtered in place.
+  const baris = useMemo(() => (laporan ? ratakan(laporan) : []), [laporan])
+
+  const { q, setQ, hasil: dicari } = useCari(baris, (b) =>
+    `${b.owner} ${b.nota} ${b.produk} ${b.kode} ${b.jenis}`)
+
+  const disaring = useMemo(
+    () => (filterOwner ? dicari.filter((b) => b.ownerId === filterOwner) : dicari),
+    [dicari, filterOwner],
+  )
+
+  const { hasil: terlihat, urutan, urutkan } = useUrut(
+    disaring,
+    {
+      owner: (b) => b.owner,
+      tanggal: (b) => b.tanggal,
+      nota: (b) => b.nota,
+      produk: (b) => b.produk,
+      qty: (b) => b.qty,
+      pendapatan: (b) => b.pendapatan,
+      hpp: (b) => b.hpp,
+      margin: (b) => b.margin,
+    },
+    { kunci: 'margin', arah: 'turun' },
+  )
+
+  // A return that came back in another period is shown for context and left
+  // out of every total (SPEC §4.4), so the footer must skip it too.
+  const marginTerlihat = sum(terlihat.filter((b) => b.dihitung).map((b) => b.margin))
 
   return (
     <>
@@ -115,55 +224,116 @@ export function MarginPage({ entityId, role }: { entityId: string; role: Role })
 
         {memuat && <Memuat apa="laporan margin" />}
 
+        {/* The answer to "bulan ini siapa dapat berapa", before any clicking.
+            The table below is the evidence for these four numbers; it should
+            not be the only way to read them. */}
+        {laporan && !memuat && laporan.owners.length > 0 && (
+          <div className="card">
+            <h3>Margin kotor per owner</h3>
+            <div className="statistik">
+              {[...laporan.owners]
+                .sort((a, b) => b.margin_idr - a.margin_idr)
+                .map((o) => (
+                  <Stat
+                    key={o.owner_id || 'perusahaan'}
+                    label={o.owner_name}
+                    nilai={formatIDR(o.margin_idr)}
+                    kaki={`dari ${o.sales.length} nota`}
+                  />
+                ))}
+              <Stat
+                label="Total"
+                nilai={formatIDR(laporan.totals.margin_idr)}
+                kaki="semua owner"
+                besar
+              />
+            </div>
+          </div>
+        )}
+
         {laporan && !memuat && (
           <div className="card">
-            {laporan.owners.length === 0 ? (
-              <p className="kosong">Belum ada penjualan pada periode ini.</p>
+            <div className="alat">
+              <Cari
+                nilai={q}
+                ubah={setQ}
+                label="Cari"
+                petunjuk="owner, nota, atau nama produk"
+              />
+              <label>
+                <span>Owner</span>
+                <select value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
+                  <option value="">Semua owner</option>
+                  {(laporan.owners ?? []).map((o) => (
+                    <option key={o.owner_id || 'perusahaan'} value={o.owner_id}>
+                      {o.owner_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span className="hitung">
+                {terlihat.length} baris · margin {formatIDR(marginTerlihat)}
+              </span>
+            </div>
+
+            {terlihat.length === 0 ? (
+              <p className="kosong">Tidak ada baris yang cocok pada periode ini.</p>
             ) : (
-              <Tabel label="Margin per owner, dengan rincian sampai lapisan stok" lengket={2}>
+              <Tabel label="Margin per owner, satu baris per produk terjual" lengket={2}>
                 <thead>
                   <tr>
-                    <th style={{ width: 40 }} />
-                    <th>Rincian</th>
-                    <th className="angka">Jumlah</th>
-                    <th className="angka">Pendapatan</th>
-                    <th className="angka">HPP</th>
-                    <th className="angka">Retur</th>
-                    <th className="angka">Margin</th>
+                    <Th kunci="owner" urutan={urutan} urutkan={urutkan}>Owner</Th>
+                    <Th kunci="tanggal" urutan={urutan} urutkan={urutkan} lebar={110}>Tanggal</Th>
+                    <Th kunci="nota" urutan={urutan} urutkan={urutkan}>Nota</Th>
+                    <Th kunci="produk" urutan={urutan} urutkan={urutkan}>Produk</Th>
+                    <Th kunci="qty" urutan={urutan} urutkan={urutkan} angka lebar={80}>Jumlah</Th>
+                    <Th>Modal per unit, per kiriman</Th>
+                    <Th kunci="pendapatan" urutan={urutan} urutkan={urutkan} angka>Pendapatan</Th>
+                    <Th kunci="hpp" urutan={urutan} urutkan={urutkan} angka>HPP</Th>
+                    <Th kunci="margin" urutan={urutan} urutkan={urutkan} angka>Margin</Th>
                   </tr>
                 </thead>
                 <tbody>
-                  {laporan.owners.map((o) => (
-                    <Fragment key={o.owner_id || 'perusahaan'}>
-                      {barisOwner(o, terbuka, alih)}
-                    </Fragment>
+                  {terlihat.map((b) => (
+                    <tr key={b.kunci} className={b.dihitung ? undefined : 'baris-redup'}>
+                      <td>{b.owner}</td>
+                      <td>{b.tanggal}</td>
+                      <td>
+                        {b.nota}
+                        {b.jenis !== 'Penjualan' && (
+                          <>
+                            <br />
+                            <small className="catatan">
+                              {b.jenis}
+                              {!b.dihitung && ' · tidak dihitung'}
+                            </small>
+                          </>
+                        )}
+                      </td>
+                      <td>
+                        {b.produk}
+                        <br />
+                        <small className="catatan">{b.kode}</small>
+                      </td>
+                      <td className="angka">{b.qty}</td>
+                      <td><Lapisan layers={b.layers} /></td>
+                      <td className="angka">{formatIDR(b.pendapatan)}</td>
+                      <td className="angka">{formatIDR(b.hpp)}</td>
+                      <td className="angka">{formatIDR(b.margin)}</td>
+                    </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td />
-                    <td>Total semua owner</td>
-                    <td />
-                    <td className="angka">{formatIDR(laporan.totals.revenue_idr)}</td>
-                    <td className="angka">{formatIDR(laporan.totals.cogs_idr)}</td>
-                    <td className="angka">
-                      {laporan.totals.return_margin_idr === 0
-                        ? '—'
-                        : `-${formatIDR(laporan.totals.return_margin_idr)}`}
+                    <td colSpan={6}>
+                      Total {filterOwner || q ? 'baris yang terlihat' : 'semua owner'}
                     </td>
-                    <td className="angka">
-                      <strong>{formatIDR(laporan.totals.margin_idr)}</strong>
-                    </td>
+                    <td className="angka">{formatIDR(sum(terlihat.filter((b) => b.dihitung).map((b) => b.pendapatan)))}</td>
+                    <td className="angka">{formatIDR(sum(terlihat.filter((b) => b.dihitung).map((b) => b.hpp)))}</td>
+                    <td className="angka">{formatIDR(marginTerlihat)}</td>
                   </tr>
                 </tfoot>
               </Tabel>
-            )}
-
-            {laporan.owners.length > 0 && (
-              <p className="catatan">
-                Buka tanda panah untuk melihat nota di balik angka, lalu produk di dalamnya, lalu
-                lapisan stok yang benar-benar terpakai beserta status fakturnya.
-              </p>
             )}
           </div>
         )}
@@ -184,282 +354,6 @@ export function MarginPage({ entityId, role }: { entityId: string; role: Role })
 
 /* --- the rows -------------------------------------------------------------
 
-   Each level returns a flat array of <tr>, so the whole drill-down is one
-   table body with one column grid. Depth is indentation on the first content
-   cell plus a background step on the row, never a nested <table>. */
-
-function barisOwner(
-  owner: OwnerMargin,
-  terbuka: Set<string>,
-  alih: (k: string) => void,
-): ReactNode[] {
-  const kunci = `owner:${owner.owner_id}`
-  const buka = terbuka.has(kunci)
-  const adaRetur = owner.return_refund_idr !== 0 || owner.return_cogs_idr !== 0
-  const rows: ReactNode[] = []
-
-  rows.push(
-    <tr key={kunci}>
-      <td>
-        <Pemicu buka={buka} alih={() => alih(kunci)} label={owner.owner_name} />
-      </td>
-      <td>
-        <strong>{owner.owner_name}</strong>
-        {owner.is_company && (
-          <>
-            <br />
-            <small className="catatan">stok tanpa owner</small>
-          </>
-        )}
-      </td>
-      <td />
-      <td className="angka">{formatIDR(owner.revenue_idr)}</td>
-      <td className="angka">{formatIDR(owner.cogs_idr)}</td>
-      <td className="angka">{adaRetur ? `-${formatIDR(owner.return_margin_idr)}` : '—'}</td>
-      <td className="angka">
-        <strong>{formatIDR(owner.margin_idr)}</strong>
-      </td>
-    </tr>,
-  )
-
-  if (!buka) return rows
-
-  if (owner.ppn_idr !== 0 || adaRetur) {
-    rows.push(
-      <tr key={`${kunci}:hitung`} className="rincian">
-        <td />
-        <td colSpan={6}>
-          {owner.ppn_idr !== 0 && (
-            <p className="catatan">
-              Diterima dari pelanggan {formatIDR(owner.tendered_idr)} = penjualan{' '}
-              {formatIDR(owner.revenue_idr)} + PPN {formatIDR(owner.ppn_idr)}. PPN disetor ke
-              negara dan tidak masuk margin.
-            </p>
-          )}
-          {adaRetur && (
-            <p className="catatan">
-              Penjualan {formatIDR(owner.revenue_idr)} − HPP {formatIDR(owner.cogs_idr)} ={' '}
-              {formatIDR(owner.gross_margin_idr)}, dikurangi retur{' '}
-              {formatIDR(owner.return_margin_idr)} (uang kembali{' '}
-              {formatIDR(owner.return_refund_idr)}
-              {owner.return_ppn_idr !== 0 && <> termasuk PPN {formatIDR(owner.return_ppn_idr)}</>},
-              HPP kembali {formatIDR(owner.return_cogs_idr)}).
-            </p>
-          )}
-        </td>
-      </tr>,
-    )
-  }
-
-  if (owner.sales.length === 0) {
-    rows.push(
-      <tr key={`${kunci}:kosong`} className="baris-2">
-        <td />
-        <td colSpan={6} className="tingkat-1 teks-redup">
-          Tidak ada penjualan pada periode ini.
-        </td>
-      </tr>,
-    )
-  }
-
-  for (const s of owner.sales) {
-    rows.push(...barisPenjualan(owner, s, terbuka, alih))
-  }
-
-  if (owner.returns.length > 0) {
-    rows.push(seksi(`${kunci}:seksi-retur`, 'Retur'))
-    for (const r of owner.returns) {
-      rows.push(...barisRetur(owner, r, 'retur', terbuka, alih))
-    }
-  }
-
-  if (owner.later_returns.length > 0) {
-    rows.push(
-      seksi(
-        `${kunci}:seksi-retur-lain`,
-        'Barang bulan ini yang kembali di bulan lain',
-        'Keterangan saja — tidak dikurangkan dari angka di atas. Sudah dihitung di bulan barang itu kembali.',
-      ),
-    )
-    for (const r of owner.later_returns) {
-      rows.push(...barisRetur(owner, r, 'retur-lain', terbuka, alih))
-    }
-  }
-
-  return rows
-}
-
-function barisPenjualan(
-  owner: OwnerMargin,
-  sale: MarginSale,
-  terbuka: Set<string>,
-  alih: (k: string) => void,
-): ReactNode[] {
-  const kunci = `sale:${owner.owner_id}:${sale.sale_id}`
-  const buka = terbuka.has(kunci)
-  const rows: ReactNode[] = [
-    <tr key={kunci} className="baris-2">
-      <td>
-        <Pemicu buka={buka} alih={() => alih(kunci)} label={`nota ${sale.invoice_no}`} />
-      </td>
-      <td className="tingkat-1">
-        {sale.invoice_no}
-        <br />
-        <small className="catatan">
-          {sale.business_date} · {sale.customer_name || 'tanpa pelanggan'}
-        </small>
-      </td>
-      <td />
-      <td className="angka">{formatIDR(sale.revenue_idr)}</td>
-      <td className="angka">{formatIDR(sale.cogs_idr)}</td>
-      <td className="angka">—</td>
-      <td className="angka">{formatIDR(sale.margin_idr)}</td>
-    </tr>,
-  ]
-
-  if (buka) {
-    for (const p of sale.products) rows.push(...barisProduk(p, kunci, terbuka, alih))
-  }
-  return rows
-}
-
-function barisRetur(
-  owner: OwnerMargin,
-  r: MarginReturn,
-  jenis: string,
-  terbuka: Set<string>,
-  alih: (k: string) => void,
-): ReactNode[] {
-  const kunci = `${jenis}:${owner.owner_id}:${r.return_id}`
-  const buka = terbuka.has(kunci)
-  const rows: ReactNode[] = [
-    <tr key={kunci} className="baris-2">
-      <td>
-        <Pemicu buka={buka} alih={() => alih(kunci)} label={`retur nota ${r.sale_invoice_no}`} />
-      </td>
-      <td className="tingkat-1">
-        Retur nota {r.sale_invoice_no}
-        <br />
-        {/* All three dates, always. Nobody reading a settlement should have to
-            work out which rule was in force when a return crossed a boundary. */}
-        <small className="catatan">
-          dikembalikan {r.business_date} · dijual {r.sale_business_date} · dihitung pada{' '}
-          {r.effective_date}
-          {r.crosses_period && ' · lintas bulan'}
-          {r.reason && ` · ${r.reason}`}
-        </small>
-      </td>
-      <td />
-      <td className="angka">-{formatIDR(r.revenue_reversed_idr)}</td>
-      <td className="angka">-{formatIDR(r.cogs_reversed_idr)}</td>
-      <td className="angka">-{formatIDR(r.margin_idr)}</td>
-      <td className="angka">—</td>
-    </tr>,
-  ]
-
-  if (buka) {
-    for (const p of r.products) rows.push(...barisProduk(p, kunci, terbuka, alih))
-  }
-  return rows
-}
-
-function barisProduk(
-  p: ProductLine,
-  induk: string,
-  terbuka: Set<string>,
-  alih: (k: string) => void,
-): ReactNode[] {
-  const kunci = `${induk}:${p.product_id}`
-  const buka = terbuka.has(kunci)
-  const rows: ReactNode[] = [
-    <tr key={kunci} className="baris-3">
-      <td>
-        <Pemicu buka={buka} alih={() => alih(kunci)} label={p.product_name} />
-      </td>
-      <td className="tingkat-2">
-        {p.product_name}
-        <br />
-        <small className="catatan">{p.product_code}</small>
-      </td>
-      <td className="angka">{p.qty}</td>
-      <td className="angka">{formatIDR(p.revenue_idr)}</td>
-      <td className="angka">{formatIDR(p.cogs_idr)}</td>
-      <td className="angka">—</td>
-      <td className="angka">{formatIDR(p.margin_idr)}</td>
-    </tr>,
-  ]
-
-  if (buka) {
-    if (p.layers.length === 0) {
-      rows.push(
-        <tr key={`${kunci}:kosong`} className="baris-4">
-          <td />
-          <td colSpan={6} className="tingkat-3 teks-redup">
-            Tidak ada lapisan stok.
-          </td>
-        </tr>,
-      )
-    }
-    for (const l of p.layers) rows.push(barisLapisan(l, kunci))
-  }
-  return rows
-}
-
-/**
- * The bottom of the drill-down: one slice of one FIFO layer, oldest first —
- * the order they were actually drawn.
- *
- * The faktur note is the point of this row. Two purchases at the same price
- * from the same supplier produce different costs depending on whether the
- * supplier handed over the faktur pajak, because without it the PPN paid was
- * never creditable and became cost (INV-9, SPEC §3.2). On this screen that is
- * usually the whole answer to "why is my margin lower this month".
- */
-function barisLapisan(l: LayerDraw, induk: string): ReactNode {
-  return (
-    <tr key={`${induk}:${l.consumption_id}`} className="baris-4">
-      <td />
-      <td className="tingkat-3">
-        <code>…{l.layer_id.slice(-8)}</code>
-        {l.is_reversal && <span className="lencana"> dikembalikan</span>}
-        <br />
-        <small className="catatan">
-          masuk {new Date(l.acquired_at * 1000).toLocaleDateString('id-ID')} · {l.source} ·{' '}
-          {formatIDR(l.layer_cost_total_idr)} untuk {l.layer_qty_in}
-        </small>
-        <br />
-        {l.faktur_received ? (
-          <small className="catatan">faktur pajak ada</small>
-        ) : (
-          <small className="teks-bahaya">tanpa faktur — PPN masuk ke biaya</small>
-        )}
-      </td>
-      <td className="angka">{l.qty}</td>
-      <td className="angka">—</td>
-      <td className="angka">{formatIDR(l.cost_idr)}</td>
-      <td className="angka">—</td>
-      <td className="angka">—</td>
-    </tr>
-  )
-}
-
-/** A labelled break inside the drill-down. */
-function seksi(kunci: string, judul: string, keterangan?: string): ReactNode {
-  return (
-    <tr key={kunci} className="rincian">
-      <td />
-      <td colSpan={6}>
-        <strong>{judul}</strong>
-        {keterangan && (
-          <>
-            <br />
-            <small className="catatan">{keterangan}</small>
-          </>
-        )}
-      </td>
-    </tr>
-  )
-}
 
 /**
  * The rule in force for returns that cross a settlement boundary.
@@ -502,7 +396,7 @@ function AturanRetur({
         selesai()
       })
       .catch((err: unknown) =>
-        lapor(err instanceof ApiError ? err.message : 'Gagal menyimpan aturan retur'),
+        lapor(err instanceof ApiError ? err.message : 'Tidak bisa menyimpan aturan retur'),
       )
       .finally(() => setMenyimpan(false))
   }
@@ -519,8 +413,8 @@ function AturanRetur({
       </div>
       <p className="catatan">
         {aturan === 'RETURN_DATE'
-          ? 'Bulan penjualan asal tidak berubah, sehingga bagi hasil yang sudah dibayarkan tidak perlu ditarik kembali. Barang yang kembali di bulan lain tetap tercatat di bawah, sebagai keterangan.'
-          : 'Laporan bulan penjualan menjadi benar, tetapi angkanya berubah setelah uangnya dibagi.'}
+          ? 'Bulan penjualan asal tidak berubah, jadi bagi hasil yang sudah dibayarkan tidak perlu ditarik kembali. Barang yang kembali di bulan lain tetap tercatat di bawah, sebagai keterangan.'
+          : 'Laporan bulan penjualan menjadi benar, tapi angkanya berubah setelah uangnya dibagi.'}
       </p>
 
       {pilihan && (

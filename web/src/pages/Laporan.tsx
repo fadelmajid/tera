@@ -109,7 +109,7 @@ function useLaporan<T>(muat: () => Promise<T>, deps: unknown[]) {
       })
       .catch((err: unknown) => {
         setData(null)
-        setGalat(err instanceof ApiError ? err.message : 'Gagal memuat laporan')
+        setGalat(err instanceof ApiError ? err.message : 'Tidak bisa membuka laporan')
       })
       .finally(() => setMemuat(false))
   }, [jalankan])

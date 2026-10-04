@@ -30,7 +30,7 @@ export function EksporPage({ entityId }: { entityId: string }) {
       })
       .catch((err: unknown) => {
         setManifest(null)
-        setGalat(err instanceof ApiError ? err.message : 'Gagal memuat daftar isi ekspor')
+        setGalat(err instanceof ApiError ? err.message : 'Tidak bisa membuka daftar isi ekspor')
       })
   }, [entityId])
   useEffect(muat, [muat])
@@ -53,7 +53,7 @@ export function EksporPage({ entityId }: { entityId: string }) {
           agar bisa dicocokkan.
         </p>
         <p>
-          Data ini milik Anda. Tidak ada bagian yang terkunci di dalam aplikasi: jika suatu saat
+          Data ini milik Anda. Tidak ada bagian yang terkunci di dalam aplikasi: kalau suatu saat
           pindah ke sistem lain, ini yang dibawa.
         </p>
 
@@ -62,7 +62,7 @@ export function EksporPage({ entityId }: { entityId: string }) {
             sit in the page's memory. */}
         <p>
           <a className="tombol" href="/api/v1/export" download>
-            Unduh seluruh data
+            Unduh semua data
           </a>
         </p>
 
@@ -82,7 +82,7 @@ export function EksporPage({ entityId }: { entityId: string }) {
             {/* Read from the database, not from a list maintained by hand: a
                 table added next year appears here the moment it exists. */}
             <p className="catatan">
-              Daftar ini dibaca langsung dari basis data, jadi selalu mencakup seluruh tabel yang
+              Daftar ini dibaca langsung dari basis data, jadi selalu mencakup semua tabel yang
               ada — bukan daftar yang harus diperbarui manual.
             </p>
             <Tabel label="Isi ekspor">

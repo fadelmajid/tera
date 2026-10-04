@@ -270,19 +270,14 @@ p.catatan { margin: 0 0 var(--s-3); max-width: 78ch; }
   padding: 0 6px 2px;
 }
 
-/* The mark. A square, not an image: an <img> is one more thing to load and
-   one more thing that can fail with no internet. */
+/* The mark. Inline SVG, not an image: an <img> is one more thing to load and
+   one more thing that can fail with no internet. The badge and its corners are
+   drawn inside the SVG (components/Merek.tsx), so this only reserves the box. */
 .merek-tanda {
   width: 28px;
   height: 28px;
   flex: 0 0 28px;
-  border-radius: var(--s-2);
-  background: var(--accent);
-  color: var(--accent-text);
-  display: grid;
-  place-items: center;
-  font-weight: var(--w-bold);
-  font-size: var(--t-base);
+  display: block;
 }
 
 .sidebar h1 {
@@ -1242,3 +1237,19 @@ details > summary:hover { color: var(--accent-dark); }
 /* The first-run setup card carries more fields than a login, so it gets more
    room than the 380px the login column uses. */
 .masuk .card.siapkan { max-width: 460px; }
+
+/* --- margin: stock layers shown inline ------------------------------------ */
+
+/* The per-unit cost of every layer a sale drew, in the row itself. Two layers
+   of the same product 11% apart is the finding this report exists to surface
+   (INV-9); it should not require a click to see. */
+.lapisan-sel { display: flex; flex-direction: column; gap: 3px; }
+.lapisan-baris {
+  display: flex; align-items: baseline; gap: var(--s-2);
+  white-space: nowrap;
+}
+.lapisan-baris .angka { font-variant-numeric: tabular-nums; font-weight: var(--w-medium); }
+
+/* A return that came back in another period is context, not a counted figure
+   (SPEC §4.4). Dimming says so without hiding it. */
+.baris-redup td { opacity: 0.62; }

@@ -46,7 +46,7 @@ const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
  * except the one running the server it is `undefined`.
  *
  * Every mutating call carries one of these (INV-6), so calling it threw a
- * TypeError before `fetch` was ever reached — which surfaced as "tidak dapat
+ * TypeError before `fetch` was ever reached — which surfaced as "tidak bisa
  * terhubung ke server" while the server was perfectly healthy and had no record
  * of the request. Nothing that writes worked from the shop floor: no sale, no
  * purchase, not even signing in.
@@ -103,7 +103,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     const message =
       payload && typeof payload === 'object' && 'error' in payload
         ? String((payload as { error: unknown }).error)
-        : `Terjadi kesalahan (${response.status})`
+        : `Ada yang tidak beres (${response.status})`
     throw new ApiError(response.status, message, response.headers.get('Idempotent-Replay') === 'true')
   }
 

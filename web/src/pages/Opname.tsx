@@ -45,7 +45,7 @@ export function OpnamePage({ entityId }: { entityId: string }) {
       setStok(s)
       setGalat(null)
     } catch (err) {
-      setGalat(err instanceof ApiError ? err.message : 'Gagal memuat data')
+      setGalat(err instanceof ApiError ? err.message : 'Tidak bisa membuka data')
     }
   }, [entityId])
 
@@ -61,7 +61,7 @@ export function OpnamePage({ entityId }: { entityId: string }) {
         setLines(got.lines)
         setGalat(null)
       } catch (err) {
-        setGalat(err instanceof ApiError ? err.message : 'Gagal membuka opname')
+        setGalat(err instanceof ApiError ? err.message : 'Tidak bisa membuka opname')
       }
     },
     [entityId],
@@ -74,7 +74,7 @@ export function OpnamePage({ entityId }: { entityId: string }) {
       await muat()
       await buka(got.id)
     } catch (err) {
-      setGalat(err instanceof ApiError ? err.message : 'Gagal memulai opname')
+      setGalat(err instanceof ApiError ? err.message : 'Tidak bisa memulai opname')
     } finally {
       setSedang(false)
     }
@@ -84,7 +84,7 @@ export function OpnamePage({ entityId }: { entityId: string }) {
     if (!aktif) return
     const jumlah = Number(counted)
     if (!Number.isInteger(jumlah) || jumlah < 0) {
-      setGalat('Jumlah hitung harus bilangan bulat dan tidak negatif')
+      setGalat('Jumlah hitung harus angka bulat dan tidak negatif')
       return
     }
     try {
@@ -97,7 +97,7 @@ export function OpnamePage({ entityId }: { entityId: string }) {
       })
       await buka(aktif.id)
     } catch (err) {
-      setGalat(err instanceof ApiError ? err.message : 'Gagal menyimpan baris')
+      setGalat(err instanceof ApiError ? err.message : 'Tidak bisa menyimpan baris')
     }
   }
 
@@ -110,7 +110,7 @@ export function OpnamePage({ entityId }: { entityId: string }) {
       await muat()
       await buka(aktif.id)
     } catch (err) {
-      setGalat(err instanceof ApiError ? err.message : 'Gagal memposting opname')
+      setGalat(err instanceof ApiError ? err.message : 'Tidak bisa memposting opname')
     } finally {
       setSedang(false)
     }

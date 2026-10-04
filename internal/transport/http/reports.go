@@ -95,7 +95,7 @@ func handleSalesReport(rep *service.Reports) stdhttp.HandlerFunc {
 // the same reason the margin report carries one: this is gross margin and it
 // has not paid rent (REQUIREMENTS §5).
 const marginCaveatForReports = "Margin kotor: biaya bersama seperti listrik, gaji, dan sewa " +
-	"tidak termasuk. Ini bukan laba rugi."
+	"tidak ikut dihitung. Ini bukan laba rugi."
 
 // --- purchases (TASKS 6.2, R5.3) --------------------------------------------
 

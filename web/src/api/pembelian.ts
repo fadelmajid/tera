@@ -71,8 +71,21 @@ export interface PurchaseResult {
   payable: { id: string; amount_idr: IDR; due_date: string | null } | null
 }
 
-export const listPurchases = (entityId: string): Promise<Purchase[]> =>
-  api<Purchase[]>('/purchases', { entityId })
+/**
+ * A purchase in the history list, carrying what it actually cost.
+ *
+ * The server computes inventory_cost_idr because the rule depends on whether
+ * the *buying* company is PKP, not just on whether a faktur arrived — a
+ * non-PKP company can never credit input PPN even holding one. Deriving it
+ * here from faktur_received alone would be wrong for PT Medika.
+ */
+export interface PurchaseListRow extends Purchase {
+  inventory_cost_idr: IDR
+  creditable_ppn_idr: IDR
+}
+
+export const listPurchases = (entityId: string): Promise<PurchaseListRow[]> =>
+  api<PurchaseListRow[]>('/purchases', { entityId })
 
 export const getPurchase = (
   entityId: string,

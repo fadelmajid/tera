@@ -92,7 +92,7 @@ export function TransferPage({
   }
 
   const lapor = (err: unknown) =>
-    setGalat(err instanceof ApiError ? err.message : 'Terjadi kesalahan')
+    setGalat(err instanceof ApiError ? err.message : 'Ada yang tidak beres')
 
   /** Always previews first. The commit needs a plan the person has seen. */
   const hitung = () => {
@@ -222,8 +222,8 @@ export function TransferPage({
                     Faktur pajak diterbitkan
                     <small className="petunjuk">
                       {entitasTujuan?.is_pkp
-                        ? 'Perusahaan tujuan PKP: PPN-nya bisa dikreditkan.'
-                        : 'Perusahaan tujuan non-PKP: PPN tetap menjadi biaya, faktur tidak menolong.'}
+                        ? 'Perusahaan tujuan PKP — PPN-nya masih bisa dipakai.'
+                        : 'Perusahaan tujuan non-PKP — PPN-nya jadi biaya. Ada faktur pun tidak menolong.'}
                     </small>
                   </span>
                 </label>
@@ -314,8 +314,8 @@ function ArahTransfer({
         <p className="catatan">
           Penyerahan kena PPN.{' '}
           {tujuan.is_pkp
-            ? 'Perusahaan tujuan PKP dan dapat mengkreditkannya bila ada faktur.'
-            : 'Perusahaan tujuan tidak dapat mengkreditkannya — PPN masuk ke harga pokok.'}
+            ? 'Perusahaan tujuan PKP. Kalau ada faktur, PPN-nya masih bisa dipakai.'
+            : 'Perusahaan tujuan tidak bisa memakainya — PPN-nya masuk ke harga barang.'}
         </p>
       ) : (
         <p className="catatan">
@@ -448,7 +448,7 @@ function RingkasanRencana({
 }) {
   return (
     <div className="card">
-      <h3>Periksa sebelum menyimpan</h3>
+      <h3>Cek dulu sebelum disimpan</h3>
       <TabelRencana rencana={rencana} />
       <div className="aksi">
         <button disabled={sibuk} onClick={lanjut}>
@@ -531,14 +531,14 @@ function PeringatanKreditPPN({
 
   return (
     <Modal
-      judul="Kredit PPN masukan akan hilang permanen"
+      judul="Kredit PPN akan hangus, dan tidak bisa kembali"
       gawat
       tutup={batal}
       labelTutup="Batalkan transfer"
       aksi={
         <>
           <button className="bahaya" disabled={!mengerti || sibuk} onClick={lanjut}>
-            {sibuk ? 'Menyimpan…' : 'Lanjutkan, kredit PPN hilang'}
+            {sibuk ? 'Menyimpan…' : 'Lanjut, saya mengerti PPN-nya hangus'}
           </button>
           <button className="sekunder" disabled={sibuk} onClick={batal}>
             Batalkan transfer
@@ -548,14 +548,14 @@ function PeringatanKreditPPN({
     >
       <p>
         Stok ini pindah dari <strong>{asal?.name}</strong> (non-PKP) ke{' '}
-        <strong>{tujuan?.name}</strong> (PKP). Perusahaan non-PKP tidak dapat menerbitkan faktur
-        pajak, sehingga {tujuan?.name} menerima stok <strong>tanpa kredit PPN masukan</strong>.
+        <strong>{tujuan?.name}</strong> (PKP). Perusahaan non-PKP tidak bisa mengeluarkan faktur
+        pajak. Jadi {tujuan?.name} terima stok ini <strong>tanpa kredit PPN</strong>.
       </p>
 
       {rencana.forfeited_ppn_idr > 0 ? (
         <p>
-          PPN yang sudah terlanjur dibayar atas stok ini dan tidak akan pernah bisa dikreditkan oleh
-          siapa pun:
+          PPN yang dulu sudah dibayar untuk stok ini hangus. Tidak ada yang bisa memakainya
+          lagi, sekarang atau nanti:
           <span className="angka-besar teks-bahaya">{formatIDR(rencana.forfeited_ppn_idr)}</span>
         </p>
       ) : (

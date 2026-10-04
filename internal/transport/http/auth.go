@@ -142,9 +142,9 @@ func handleLogin(auth *service.Auth, secureCookie bool) stdhttp.HandlerFunc {
 		if err != nil {
 			switch {
 			case errors.Is(err, service.ErrInvalidCredentials):
-				writeJSON(w, stdhttp.StatusUnauthorized, map[string]any{"error": err.Error()})
+				writeJSON(w, stdhttp.StatusUnauthorized, map[string]any{"error": pesanUntukPengguna(err)})
 			case errors.Is(err, service.ErrUserInactive):
-				writeJSON(w, stdhttp.StatusForbidden, map[string]any{"error": err.Error()})
+				writeJSON(w, stdhttp.StatusForbidden, map[string]any{"error": pesanUntukPengguna(err)})
 			default:
 				writeJSON(w, stdhttp.StatusInternalServerError, map[string]any{"error": "gagal masuk"})
 			}

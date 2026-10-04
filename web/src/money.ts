@@ -14,7 +14,7 @@ export type IDR = number & { readonly __brand: 'IDR' }
 /** Thrown when a value that must be whole rupiah is not. */
 export class FractionalRupiahError extends Error {
   constructor(value: number) {
-    super(`nilai rupiah harus bilangan bulat, diterima ${value}`)
+    super(`nilai rupiah harus angka bulat, diterima ${value}`)
     this.name = 'FractionalRupiahError'
   }
 }

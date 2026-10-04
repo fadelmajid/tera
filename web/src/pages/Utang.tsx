@@ -60,7 +60,7 @@ export function UtangPage({
       })
       .catch((err: unknown) => {
         setData(null)
-        setGalat(err instanceof ApiError ? err.message : 'Gagal memuat laporan')
+        setGalat(err instanceof ApiError ? err.message : 'Tidak bisa membuka laporan')
       })
       .finally(() => setMemuat(false))
   }, [entityId, kind, asOf])
@@ -441,7 +441,7 @@ function FormBayar({
     payDebt(entityId, kind, item.id, body)
       .then(selesai)
       .catch((err: unknown) =>
-        setGalat(err instanceof ApiError ? err.message : 'Gagal menyimpan pembayaran'),
+        setGalat(err instanceof ApiError ? err.message : 'Tidak bisa menyimpan pembayaran'),
       )
       .finally(() => setSibuk(false))
   }
@@ -481,7 +481,7 @@ function FormBayar({
       {lebih && (
         <div className="disclaimer">
           Lebih besar dari sisa tagihan. Kelebihannya akan muncul sebagai kelebihan bayar di
-          laporan — tidak hilang, tetapi juga tidak otomatis dipindahkan ke dokumen lain.
+          laporan — tidak hilang, tapi juga tidak otomatis dipindahkan ke dokumen lain.
         </div>
       )}
 

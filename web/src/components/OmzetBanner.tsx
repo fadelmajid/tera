@@ -117,7 +117,7 @@ export function OmzetBanner({ entityId }: { entityId: string }) {
           {data.crossed.peak_idr > data.cumulative.amount_idr && (
             <p>
               Tertinggi tahun ini {formatIDR(data.crossed.peak_idr)} pada {data.crossed.peak_on}.
-              Retur setelah itu menurunkan angka kumulatif, tetapi tidak membatalkan pelampauan yang
+              Retur setelah itu menurunkan angka kumulatif, tapi tidak membatalkan pelampauan yang
               sudah terjadi.
             </p>
           )}

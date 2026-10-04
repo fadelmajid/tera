@@ -329,7 +329,22 @@ func (p *Purchasing) GetPurchase(ctx context.Context, entityID, id string) (gen.
 }
 
 // ListPurchases returns purchases in a date range, newest first.
-func (p *Purchasing) ListPurchases(ctx context.Context, entityID, from, to string) ([]gen.Purchase, error) {
+// PurchaseListRow is a purchase plus what it actually cost the business.
+//
+// The paid figure is on the invoice; the cost is not, and the gap between them
+// is the whole reason this system tracks purchases (INV-9, SPEC §3.2). Without
+// it a list of purchases shows two identical-looking invoices whose stock cost
+// 11% apart, which is exactly the blindness being replaced.
+type PurchaseListRow struct {
+	gen.Purchase
+	// InventoryCostIDR is what entered the stock layers: everything paid that
+	// could not be credited back.
+	InventoryCostIDR money.IDR
+	// CreditablePPNIDR is the part that was recoverable, and so is not cost.
+	CreditablePPNIDR money.IDR
+}
+
+func (p *Purchasing) ListPurchases(ctx context.Context, entityID, from, to string) ([]PurchaseListRow, error) {
 	if from == "" {
 		from = "0000-01-01"
 	}
@@ -340,7 +355,34 @@ func (p *Purchasing) ListPurchases(ctx context.Context, entityID, from, to strin
 	if err != nil {
 		return nil, fmt.Errorf("service: list purchases: %w", err)
 	}
-	return rows, nil
+
+	// The cost basis turns on the buying entity, not the supplier: a non-PKP
+	// company can never credit input PPN even holding a faktur (SPEC §2.3). So
+	// the flag is read once here rather than guessed per row, and never
+	// re-derived by the browser, which does not know it.
+	entity, err := p.q.GetLegalEntity(ctx, entityID)
+	if err != nil {
+		return nil, fmt.Errorf("service: list purchases: %w", err)
+	}
+
+	out := make([]PurchaseListRow, 0, len(rows))
+	for _, row := range rows {
+		basis, err := fifo.CostBasis(fifo.Acquisition{
+			BuyerIsPKP:     entity.IsPkp == 1,
+			FakturReceived: row.FakturReceived == 1,
+			GrossPaid:      money.IDR(row.TotalIdr),
+			PPNPaid:        money.IDR(row.PpnIdr),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("service: list purchases: %s: %w", row.ID, err)
+		}
+		out = append(out, PurchaseListRow{
+			Purchase:         row,
+			InventoryCostIDR: basis.CostTotal,
+			CreditablePPNIDR: basis.CreditablePPN,
+		})
+	}
+	return out, nil
 }
 
 // InputPPNPosition is the creditable input PPN for a period, net of returns.

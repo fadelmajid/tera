@@ -103,7 +103,7 @@ export function DasborPage({
       }
       setGalat(null)
     } catch (err) {
-      setGalat(err instanceof ApiError ? err.message : 'Gagal memuat beranda')
+      setGalat(err instanceof ApiError ? err.message : 'Tidak bisa membuka beranda')
     } finally {
       setMemuat(false)
     }
@@ -124,19 +124,19 @@ export function DasborPage({
     {
       selesai: jumlah.owner > 0,
       judul: 'Tambahkan owner',
-      ket: 'Anggota keluarga yang memiliki lini produk. Margin dibagi per owner, jadi ini harus ada sebelum produk.',
+      ket: 'Anggota keluarga yang punya lini produk. Margin dibagi per owner, jadi isi ini dulu sebelum produk.',
       ke: '/owner',
     },
     {
       selesai: jumlah.produk > 0,
       judul: 'Tambahkan produk',
-      ket: 'Setiap produk ditandai miliknya siapa. Tanda itulah yang menentukan margin siapa yang naik saat terjual.',
+      ket: 'Setiap produk ditandai punya siapa. Tanda itu yang menentukan margin siapa yang naik waktu barangnya laku.',
       ke: '/produk',
     },
     {
       selesai: jumlah.pemasok > 0,
       judul: 'Tambahkan pemasok',
-      ket: 'Diperlukan untuk mencatat pembelian dan status faktur pajaknya.',
+      ket: 'Dipakai untuk mencatat pembelian dan apakah fakturnya datang.',
       ke: '/pemasok',
     },
     {
@@ -162,7 +162,7 @@ export function DasborPage({
         {entity?.name ?? 'Perusahaan'}
         {entity?.is_pkp
           ? ' — PKP, wajib memungut PPN pada setiap penjualan kena pajak.'
-          : ' — non-PKP, tidak memungut PPN dan tidak dapat mengkreditkan PPN masukan.'}
+          : ' — non-PKP, tidak memungut PPN dan tidak bisa mengkreditkan PPN masukan.'}
       </p>
 
       <Galat pesan={galat} />
@@ -284,7 +284,7 @@ export function DasborPage({
               {(stok?.out_of_stock.length ?? 0) > 0 && (
                 <p className="catatan">
                   <strong>{stok?.out_of_stock.length} produk habis</strong> — bisa di-scan kasir
-                  tetapi tidak bisa dijual.
+                  tapi tidak bisa dijual.
                 </p>
               )}
             </div>

@@ -491,7 +491,7 @@ func handleOpenDrawer(p *service.Printing) stdhttp.HandlerFunc {
 				})
 				return
 			}
-			writeJSON(w, stdhttp.StatusBadGateway, map[string]any{"error": err.Error()})
+			writeJSON(w, stdhttp.StatusBadGateway, map[string]any{"error": pesanUntukPengguna(err)})
 			return
 		}
 		writeJSON(w, stdhttp.StatusOK, map[string]any{"opened": true})

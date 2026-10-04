@@ -86,10 +86,10 @@ func idempotent(idem *service.Idempotency, log *slog.Logger) func(stdhttp.Handle
 			replay, err := idem.Claim(r.Context(), id, userID, r.Method, r.URL.Path, service.HashBody(body))
 			switch {
 			case errors.Is(err, service.ErrRequestInFlight):
-				writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
+				writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": pesanUntukPengguna(err)})
 				return
 			case errors.Is(err, service.ErrRequestMismatch):
-				writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
+				writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": pesanUntukPengguna(err)})
 				return
 			case err != nil:
 				log.ErrorContext(r.Context(), "idempotency: gagal mengklaim permintaan", "error", err)

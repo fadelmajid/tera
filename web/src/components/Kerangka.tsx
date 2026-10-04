@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Route, Routes, Navigate, useLocation } from 'react-router-dom'
+import { Merek } from './Merek'
 import type { Session } from '../api/auth'
 import {
   canManageMasterData,
@@ -141,9 +142,7 @@ export function Kerangka({
       <aside className={menuBuka ? 'sidebar terbuka' : 'sidebar'}>
         <div className="sidebar-atas">
           <div className="merek">
-            <span className="merek-tanda" aria-hidden="true">
-              T
-            </span>
+            <Merek />
             <h1>Tera</h1>
           </div>
           <button

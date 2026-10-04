@@ -24,7 +24,7 @@ export function useDaftar<T>(muat: () => Promise<T[]>, deps: unknown[]) {
         setData(rows)
         setGalat(null)
       })
-      .catch((err: unknown) => setGalat(err instanceof ApiError ? err.message : 'Gagal memuat data'))
+      .catch((err: unknown) => setGalat(err instanceof ApiError ? err.message : 'Tidak bisa membuka data'))
       .finally(() => setMemuat(false))
   }, [jalankan])
 

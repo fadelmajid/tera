@@ -52,7 +52,7 @@ export function Setup({ selesai }: { selesai: (entity: Entity) => void }) {
           <h1>Siapkan perusahaan</h1>
         </div>
         <p className="sub">
-          Perusahaan pertama. Anda otomatis menjadi pemiliknya dan dapat menambahkan pengguna
+          Perusahaan pertama. Anda otomatis menjadi pemiliknya dan bisa menambahkan pengguna
           lain setelah ini.
         </p>
 
@@ -62,10 +62,10 @@ export function Setup({ selesai }: { selesai: (entity: Entity) => void }) {
         <Teks label="Nama perusahaan" nilai={nama} ubah={setNama} wajib />
 
         <Centang
-          label="Perusahaan ini PKP (wajib memungut PPN)"
+          label="Perusahaan ini PKP (harus memungut PPN)"
           nilai={pkp}
           ubah={setPkp}
-          petunjuk="PKP wajib memungut PPN keluaran pada setiap penjualan kena pajak, baik pembeli meminta faktur maupun tidak."
+          petunjuk="Kalau PKP, setiap penjualan kena pajak harus dipungut PPN — mau pembelinya minta faktur atau tidak."
         />
 
         <Teks label="NPWP" nilai={npwp} ubah={setNpwp} />

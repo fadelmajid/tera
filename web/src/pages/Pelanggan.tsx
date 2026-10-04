@@ -43,7 +43,7 @@ export function PelangganPage({ entityId }: { entityId: string }) {
   return (
     <Halaman
       judul="Pelanggan"
-      keterangan="Diperlukan untuk penjualan kredit, dan untuk pembeli yang meminta faktur pajak."
+      keterangan="Dipakai untuk penjualan kredit, dan untuk pembeli yang minta faktur pajak."
       galat={galat}
       labelTambah="Tambah pelanggan"
       alat={

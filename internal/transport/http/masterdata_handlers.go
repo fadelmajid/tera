@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	stdhttp "net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -313,38 +314,66 @@ func decodeJSON(w stdhttp.ResponseWriter, r *stdhttp.Request, dst any) bool {
 
 func decodeMessage(err error) string {
 	if errors.Is(err, money.ErrFractional) {
-		return "nilai rupiah harus bilangan bulat"
+		return "nilai rupiah harus angka bulat, tanpa koma"
 	}
-	return "permintaan tidak valid: " + err.Error()
+	return "data yang dikirim tidak bisa dibaca: " + err.Error()
+}
+
+// pesanUntukPengguna renders a service error as the person in front of the
+// screen should read it.
+//
+// Go errors carry a package prefix ("service: nama pengguna atau kata sandi
+// salah") so a log line says where it came from. That prefix is for us. On the
+// login screen it reads as a fault in the software rather than a typo in the
+// password, so it is removed at the one place a developer error becomes a user
+// message — here, and not by dropping the prefix from the sentinels, which
+// would take it out of the logs too.
+func pesanUntukPengguna(err error) string {
+	msg := err.Error()
+	// One leading lowercase package token only. Indonesian sentences carry no
+	// such prefix, so nothing else can match.
+	if i := strings.Index(msg, ": "); i > 0 && isPackageToken(msg[:i]) {
+		return msg[i+2:]
+	}
+	return msg
+}
+
+func isPackageToken(s string) bool {
+	for _, r := range s {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
+			return false
+		}
+	}
+	return s != ""
 }
 
 func writeServiceError(w stdhttp.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, service.ErrValidation):
-		writeJSON(w, stdhttp.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(w, stdhttp.StatusBadRequest, map[string]any{"error": pesanUntukPengguna(err)})
 	// R12.5: an adjustment or a void with no explanation is refused. It is bad
 	// input, not a server fault, and the message names what is missing.
 	case errors.Is(err, service.ErrReasonRequired):
-		writeJSON(w, stdhttp.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(w, stdhttp.StatusBadRequest, map[string]any{"error": pesanUntukPengguna(err)})
 	case errors.Is(err, service.ErrNotFound):
-		writeJSON(w, stdhttp.StatusNotFound, map[string]any{"error": err.Error()})
+		writeJSON(w, stdhttp.StatusNotFound, map[string]any{"error": pesanUntukPengguna(err)})
 	case errors.Is(err, service.ErrDuplicate):
-		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
+		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": pesanUntukPengguna(err)})
 	// The request is well formed; the books are not in a state that admits it.
 	// 409 rather than 400 so a client can tell "you typed it wrong" from
 	// "someone else moved the stock while you were counting".
 	case errors.Is(err, service.ErrAlreadyPosted):
-		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
+		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": pesanUntukPengguna(err)})
 	// INV-8 reaching the wire. Never a fallback to another owner's stock, and
 	// never a 500 that reads like a bug: the message says whose stock is short.
 	case errors.Is(err, service.ErrInsufficientStock):
-		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
+		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": pesanUntukPengguna(err)})
 	// The margin report refusing to compute rather than printing a figure it
 	// cannot justify (D-011). 409 for the same reason as the two above: the
 	// request is fine, the books are not, and the message names the sale and
 	// product to look at.
 	case errors.Is(err, service.ErrReportIntegrity):
-		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
+		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": pesanUntukPengguna(err)})
 	// The state of the till and of a finalised sale (R12.3). Every one of these
 	// already says in Indonesian what the cashier should do instead — open a
 	// session, use a return rather than a void — and falling through to a 500
@@ -355,15 +384,15 @@ func writeServiceError(w stdhttp.ResponseWriter, err error) {
 		errors.Is(err, service.ErrVoidWindowClosed),
 		errors.Is(err, service.ErrVoidAfterReturn),
 		errors.Is(err, service.ErrAlreadyVoid):
-		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
+		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": pesanUntukPengguna(err)})
 	// R4.5's blocking confirmation, refusing the write. The message is the
 	// entire feature — it says the input PPN credit on this stock is destroyed
 	// permanently and the transfer has not happened — so it must reach the
 	// person, not be swallowed by a 500.
 	case errors.Is(err, service.ErrCreditLossNotAcknowledged):
-		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
+		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": pesanUntukPengguna(err)})
 	case errors.Is(err, service.ErrSameEntity):
-		writeJSON(w, stdhttp.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(w, stdhttp.StatusBadRequest, map[string]any{"error": pesanUntukPengguna(err)})
 	// The tax engine refusing to price a sale (TASKS 5.4, 5.5). This is the one
 	// that most needs to reach a person: the till has stopped because a PKP
 	// company has no PPN rule in force, or because a company marked non-PKP
@@ -372,9 +401,9 @@ func writeServiceError(w stdhttp.ResponseWriter, err error) {
 	// says which. Collapsed into "kesalahan internal" it is instead a cashier
 	// with a customer in front of them and nothing to go on.
 	case errors.Is(err, service.ErrTaxConfig):
-		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
+		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": pesanUntukPengguna(err)})
 	case errors.Is(err, service.ErrRuleInForce), errors.Is(err, service.ErrRuleClosed):
-		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": err.Error()})
+		writeJSON(w, stdhttp.StatusConflict, map[string]any{"error": pesanUntukPengguna(err)})
 	default:
 		writeJSON(w, stdhttp.StatusInternalServerError, map[string]any{"error": "kesalahan internal"})
 	}

@@ -40,7 +40,7 @@ export function OwnerPage({ entityId }: { entityId: string }) {
   return (
     <Halaman
       judul="Owner"
-      keterangan="Anggota keluarga yang memiliki lini produk. Margin dihitung dan disetorkan per owner."
+      keterangan="Anggota keluarga yang punya lini produk. Margin dihitung dan dibagi per owner."
       galat={galat}
       labelTambah="Tambah owner"
       form={

@@ -3,6 +3,7 @@ import { login } from '../api/auth'
 import type { Session } from '../api/auth'
 import { ApiError } from '../api/client'
 import { Galat } from '../components/dasar'
+import { Merek } from '../components/Merek'
 
 /** The login screen. */
 export function Masuk({ onMasuk }: { onMasuk: (session: Session) => void }) {
@@ -20,7 +21,7 @@ export function Masuk({ onMasuk }: { onMasuk: (session: Session) => void }) {
     } catch (err) {
       // The server returns one message for a wrong password and an unknown
       // user alike; repeating it verbatim keeps it that way.
-      setGalat(err instanceof ApiError ? err.message : 'Tidak dapat terhubung ke server')
+      setGalat(err instanceof ApiError ? err.message : 'Tidak bisa terhubung ke server')
     } finally {
       setSedang(false)
     }
@@ -30,9 +31,7 @@ export function Masuk({ onMasuk }: { onMasuk: (session: Session) => void }) {
     <div className="masuk">
       <form className="card" onSubmit={kirim}>
         <div className="merek">
-          <span className="merek-tanda" aria-hidden="true">
-            T
-          </span>
+          <Merek />
           <h1>Tera</h1>
         </div>
         <p className="sub">Sistem persediaan dan penjualan</p>

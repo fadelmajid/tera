@@ -136,7 +136,7 @@ func TestSaleNeverDrawsAnotherOwnersStock(t *testing.T) {
 	}
 	// The message has to explain itself, or a cashier looking at a full shelf
 	// reads it as a bug and starts keeping a notebook.
-	if msg := err.Error(); !strings.Contains(msg, "pemilik lain") {
+	if msg := err.Error(); !strings.Contains(msg, "owner lain") {
 		t.Errorf("error does not mention that the remaining stock belongs to someone else: %q", msg)
 	}
 

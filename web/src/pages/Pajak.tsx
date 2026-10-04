@@ -66,7 +66,7 @@ export function PajakPage({ entityId, role, isPKP }: { entityId: string; role: R
         setGalat(null)
       })
       .catch((err: unknown) =>
-        setGalat(err instanceof ApiError ? err.message : 'Gagal memuat aturan pajak'),
+        setGalat(err instanceof ApiError ? err.message : 'Tidak bisa membuka aturan pajak'),
       )
       .finally(() => setMemuat(false))
   }, [entityId])
@@ -85,7 +85,7 @@ export function PajakPage({ entityId, role, isPKP }: { entityId: string; role: R
           <div className="card">
             <p>
               <strong>Perusahaan ini bukan PKP.</strong> Tidak memungut PPN, tidak menerbitkan
-              faktur pajak, dan tidak dapat mengkreditkan PPN masukan — PPN yang dibayar ke pemasok
+              faktur pajak, dan tidak bisa mengkreditkan PPN masukan — PPN yang dibayar ke pemasok
               masuk ke harga pokok barang.
             </p>
             <p className="catatan">
@@ -153,7 +153,7 @@ function BatasOmzet({ entityId, bolehUbah }: { entityId: string; bolehUbah: bool
         setGalat(null)
       })
       .catch((err: unknown) =>
-        setGalat(err instanceof ApiError ? err.message : 'Gagal memuat batas omzet'),
+        setGalat(err instanceof ApiError ? err.message : 'Tidak bisa membuka batas omzet'),
       )
     omzetPosition(entityId)
       .then((p) => setBase(p.base))
@@ -172,7 +172,7 @@ function BatasOmzet({ entityId, bolehUbah }: { entityId: string; bolehUbah: bool
         muat()
       })
       .catch((err: unknown) =>
-        setGalat(err instanceof ApiError ? err.message : 'Gagal menyimpan dasar omzet'),
+        setGalat(err instanceof ApiError ? err.message : 'Tidak bisa menyimpan dasar omzet'),
       )
       .finally(() => setSibuk(false))
   }
@@ -274,7 +274,7 @@ function BatasOmzet({ entityId, bolehUbah }: { entityId: string; bolehUbah: bool
             {base === 'NET_OF_VAT' ? 'tanpa PPN' : 'termasuk PPN'}.
           </p>
           <p className="catatan">
-            Ini mengubah posisi terhadap batas Rp 4,8 miliar untuk seluruh tahun buku, termasuk
+            Ini mengubah posisi terhadap batas Rp 4,8 miliar untuk semua tahun buku, termasuk
             tahun yang sudah lewat, dan karenanya bisa mengubah tanggal perusahaan dianggap
             melewati batas. Perubahan dicatat di log audit.
           </p>
@@ -319,7 +319,7 @@ function AturanPajak({
       setGalat(null)
       muatUlang()
     } catch (err: unknown) {
-      setGalat(err instanceof ApiError ? err.message : 'Gagal menyimpan aturan pajak')
+      setGalat(err instanceof ApiError ? err.message : 'Tidak bisa menyimpan aturan pajak')
     } finally {
       setSibuk(false)
     }
@@ -484,7 +484,7 @@ function AturanPajak({
         >
           <p>
             Aturan <strong>{menghapus.legal_ref}</strong> belum berlaku — mulai{' '}
-            {menghapus.valid_from} — sehingga belum pernah dipakai untuk menghitung PPN apa pun.
+            {menghapus.valid_from} — jadi belum pernah dipakai untuk menghitung PPN apa pun.
           </p>
           <p className="catatan">
             Hanya aturan yang belum berlaku yang bisa dihapus. Perubahan dicatat di log audit.
@@ -605,9 +605,9 @@ function FormAturan({
       {!inclusive && (
         <div className="galat" role="alert">
           <strong>Layar kasir belum mendukung harga sebelum PPN.</strong> Total di keranjang
-          dihitung dari harga jual, sehingga PPN yang ditambahkan belum terlihat dan kembalian bisa
+          dihitung dari harga jual, jadi PPN yang ditambahkan belum terlihat dan kembalian bisa
           salah sampai penjualan disimpan. Penjualan yang tersimpan tetap benar. Gunakan pilihan ini
-          hanya jika penjualan tidak dilayani lewat kasir.
+          hanya kalau penjualan tidak dilayani lewat kasir.
         </div>
       )}
 
@@ -633,7 +633,7 @@ function PosisiPPN({ entityId }: { entityId: string }) {
       })
       .catch((err: unknown) => {
         setData(null)
-        setGalat(err instanceof ApiError ? err.message : 'Gagal memuat posisi PPN')
+        setGalat(err instanceof ApiError ? err.message : 'Tidak bisa membuka posisi PPN')
       })
   }, [entityId, masa])
   useEffect(muat, [muat])
@@ -689,7 +689,7 @@ function PosisiPPN({ entityId }: { entityId: string }) {
               </tr>
 
               <tr>
-                <td>PPN masukan yang dapat dikreditkan (ada faktur)</td>
+                <td>PPN masukan yang bisa dikreditkan (ada faktur)</td>
                 <td className="angka">{formatIDR(data.input.creditable_idr)}</td>
               </tr>
               {data.input.reversed_idr !== 0 && (
@@ -703,7 +703,7 @@ function PosisiPPN({ entityId }: { entityId: string }) {
                   claim the same rupiah twice. */}
               <tr>
                 <td>
-                  PPN masukan <strong>tanpa faktur</strong> — tidak dapat dikreditkan
+                  PPN masukan <strong>tanpa faktur</strong> — tidak bisa dikreditkan
                   <br />
                   <small className="catatan">
                     Sudah masuk ke harga pokok barang, jadi tidak dikurangkan di sini.
@@ -728,7 +728,7 @@ function PosisiPPN({ entityId }: { entityId: string }) {
                     <>
                       <br />
                       <small className="catatan">
-                        Dapat dikompensasikan ke masa pajak berikutnya.
+                        Bisa dikompensasikan ke masa pajak berikutnya.
                       </small>
                     </>
                   )}
@@ -783,7 +783,7 @@ function PosisiPPN({ entityId }: { entityId: string }) {
                   <th>Pemasok</th>
                   <th>Faktur diterima</th>
                   <th className="angka">PPN dibayar</th>
-                  <th className="angka">Dapat dikreditkan</th>
+                  <th className="angka">Bisa dikreditkan</th>
                 </tr>
               </thead>
               <tbody>

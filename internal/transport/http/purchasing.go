@@ -184,6 +184,16 @@ func payableOrNil(p *gen.Payable) any {
 	}
 }
 
+// purchaseListDTO is a purchase row with the two figures that differ: what was
+// paid, and what of it became stock cost. Sent from the server because the rule
+// turns on whether the buying entity is PKP (fifo.CostBasis), which the browser
+// has no business re-implementing.
+type purchaseListDTO struct {
+	purchaseDTO
+	InventoryCostIDR money.IDR `json:"inventory_cost_idr"`
+	CreditablePPNIDR money.IDR `json:"creditable_ppn_idr"`
+}
+
 func handleListPurchases(p *service.Purchasing) stdhttp.HandlerFunc {
 	return func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 		entityID, _ := EntityFrom(r.Context())
@@ -193,9 +203,13 @@ func handleListPurchases(p *service.Purchasing) stdhttp.HandlerFunc {
 			writeServiceError(w, err)
 			return
 		}
-		out := make([]purchaseDTO, 0, len(rows))
+		out := make([]purchaseListDTO, 0, len(rows))
 		for _, row := range rows {
-			out = append(out, toPurchaseDTO(row))
+			out = append(out, purchaseListDTO{
+				purchaseDTO:      toPurchaseDTO(row.Purchase),
+				InventoryCostIDR: row.InventoryCostIDR,
+				CreditablePPNIDR: row.CreditablePPNIDR,
+			})
 		}
 		writeJSON(w, stdhttp.StatusOK, out)
 	}

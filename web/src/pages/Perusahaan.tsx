@@ -69,7 +69,7 @@ export function PerusahaanPage({
       // before the sidebar switcher can offer the new one.
       muatUlang()
     } catch (err) {
-      setGalat(err instanceof ApiError ? err.message : 'Gagal menambah perusahaan')
+      setGalat(err instanceof ApiError ? err.message : 'Tidak bisa menambah perusahaan')
     } finally {
       setSibuk(false)
     }
@@ -102,13 +102,13 @@ export function PerusahaanPage({
             label="Perusahaan ini PKP (wajib memungut PPN)"
             nilai={pkp}
             ubah={setPkp}
-            petunjuk="PKP wajib memungut PPN keluaran pada setiap penjualan kena pajak, baik pembeli meminta faktur maupun tidak, dan dapat mengkreditkan PPN masukan bila fakturnya ada."
+            petunjuk="PKP wajib memungut PPN keluaran pada setiap penjualan kena pajak, baik pembeli meminta faktur maupun tidak, dan bisa mengkreditkan PPN masukan kalau fakturnya ada."
           />
 
           <div className="disclaimer">
             Memindahkan stok dari perusahaan non-PKP ke perusahaan PKP menghapus kredit PPN
             masukan atas stok itu secara permanen — perusahaan non-PKP tidak bisa menerbitkan
-            faktur pajak, sehingga rantai kreditnya putus dan tidak bisa disambung kembali (R4.5).
+            faktur pajak, jadi rantai kreditnya putus dan tidak bisa disambung kembali (R4.5).
             Estimasi berdasarkan data di sistem ini. Konfirmasikan dengan konsultan pajak Anda.
           </div>
 

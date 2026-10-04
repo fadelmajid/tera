@@ -56,7 +56,7 @@ export function ProdukPage({ entityId }: { entityId: string }) {
       produk.muatUlang()
     } catch (err) {
       produk.setGalat(
-        err instanceof ApiError ? err.message : 'Harga harus bilangan bulat rupiah, tanpa koma',
+        err instanceof ApiError ? err.message : 'Harga harus angka bulat rupiah, tanpa koma',
       )
     } finally {
       setSedang(false)

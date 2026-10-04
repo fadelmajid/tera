@@ -89,7 +89,7 @@ export function KasirPage({ entityId, isPKP }: { entityId: string; isPKP: boolea
       setSesi(s)
       setGalat(null)
     } catch (err) {
-      setGalat(err instanceof ApiError ? err.message : 'Gagal memuat data')
+      setGalat(err instanceof ApiError ? err.message : 'Tidak bisa membuka data')
     }
   }, [entityId])
 
@@ -201,7 +201,7 @@ export function KasirPage({ entityId, isPKP }: { entityId: string; isPKP: boolea
       setModalAwal('')
       setGalat(null)
     } catch (err) {
-      setGalat(err instanceof ApiError ? err.message : 'Gagal membuka sesi kas')
+      setGalat(err instanceof ApiError ? err.message : 'Tidak bisa membuka sesi kas')
     } finally {
       setMembuka(false)
     }
@@ -240,7 +240,7 @@ export function KasirPage({ entityId, isPKP }: { entityId: string; isPKP: boolea
       setFakturDiterbitkan(false)
       setGalat(null)
     } catch (err) {
-      setGalat(err instanceof ApiError ? err.message : 'Gagal menyimpan penjualan')
+      setGalat(err instanceof ApiError ? err.message : 'Tidak bisa menyimpan penjualan')
     } finally {
       setSedang(false)
     }
@@ -335,7 +335,7 @@ export function KasirPage({ entityId, isPKP }: { entityId: string; isPKP: boolea
                 label="Modal awal laci"
                 nilai={modalAwal}
                 ubah={setModalAwal}
-                petunjuk="Rupiah bulat, mis. 500.000. Kosongkan jika laci mulai kosong."
+                petunjuk="Rupiah bulat, mis. 500.000. Kosongkan kalau laci mulai kosong."
               />
               <button onClick={() => void bukaSesi()} disabled={membuka}>
                 {membuka ? 'Membuka…' : 'Buka sesi'}
@@ -455,7 +455,7 @@ export function KasirPage({ entityId, isPKP }: { entityId: string; isPKP: boolea
                     </select>
                     {kreditTanpaPelanggan && (
                       <small className="petunjuk">
-                        Piutang harus punya nama. Tambahkan pelanggan lebih dulu bila belum ada.
+                        Piutang harus punya nama. Tambahkan pelanggan lebih dulu kalau belum ada.
                       </small>
                     )}
                   </label>
@@ -477,7 +477,7 @@ export function KasirPage({ entityId, isPKP }: { entityId: string; isPKP: boolea
                     label="Dibayar"
                     nilai={dibayar}
                     ubah={setDibayar}
-                    petunjuk="Kosongkan bila uangnya pas"
+                    petunjuk="Kosongkan kalau uangnya pas"
                     inputMode="numeric"
                   />
                   {metode !== 'TUNAI' && (

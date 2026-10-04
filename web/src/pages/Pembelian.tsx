@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { listProducts, listSuppliers, listOwners } from '../api/masterdata'
 import type { Product, Supplier, Owner } from '../api/masterdata'
 import { createPurchase, listPurchases } from '../api/pembelian'
-import type { Purchase, PurchaseLineBody, PurchaseResult } from '../api/pembelian'
+import type { PurchaseListRow, PurchaseLineBody, PurchaseResult } from '../api/pembelian'
 import { ApiError } from '../api/client'
 import { formatIDR, parseIDR, ZERO, add, mulQty } from '../money'
 import type { IDR } from '../money'
@@ -30,7 +30,7 @@ const barisKosong = (): Baris => ({ productId: '', jumlah: '1', harga: '', ppn: 
  * fact about a piece of paper, not a calculation.
  */
 export function PembelianPage({ entityId, isPKP }: { entityId: string; isPKP: boolean }) {
-  const pembelian = useDaftar<Purchase>(() => listPurchases(entityId), [entityId])
+  const pembelian = useDaftar<PurchaseListRow>(() => listPurchases(entityId), [entityId])
   const produk = useDaftar<Product>(() => listProducts(entityId), [entityId])
   const pemasok = useDaftar<Supplier>(() => listSuppliers(entityId), [entityId])
   const owners = useDaftar<Owner>(() => listOwners(entityId), [entityId])
@@ -106,7 +106,7 @@ export function PembelianPage({ entityId, isPKP }: { entityId: string; isPKP: bo
       pembelian.muatUlang()
     } catch (err) {
       pembelian.setGalat(
-        err instanceof ApiError ? err.message : 'Nilai rupiah harus bilangan bulat, tanpa koma',
+        err instanceof ApiError ? err.message : 'Nilai rupiah harus angka bulat, tanpa koma',
       )
     } finally {
       setSedang(false)
@@ -157,7 +157,7 @@ export function PembelianPage({ entityId, isPKP }: { entityId: string; isPKP: bo
                 label="Faktur pajak diterima dari pemasok"
                 nilai={fakturDiterima}
                 ubah={setFakturDiterima}
-                petunjuk="Centang hanya jika fakturnya benar-benar ada di tangan. Bukan dijanjikan, bukan menyusul."
+                petunjuk="Centang hanya kalau fakturnya benar-benar ada di tangan. Bukan dijanjikan, bukan menyusul."
               />
 
               {fakturDiterima && (
@@ -168,7 +168,7 @@ export function PembelianPage({ entityId, isPKP }: { entityId: string; isPKP: bo
                 {isPKP ? (
                   fakturDiterima ? (
                     <>
-                      PPN <strong>{formatIDR(ppnTotal)}</strong> dapat dikreditkan, jadi{' '}
+                      PPN <strong>{formatIDR(ppnTotal)}</strong> bisa dikreditkan, jadi{' '}
                       <strong>tidak masuk biaya</strong>. Biaya persediaan{' '}
                       <strong>{formatIDR(dasarBiaya)}</strong>.
                     </>
@@ -328,7 +328,7 @@ export function PembelianPage({ entityId, isPKP }: { entityId: string; isPKP: bo
                   <th>Produk</th>
                   <th className="angka">Dibayar</th>
                   <th className="angka">Biaya persediaan</th>
-                  <th className="angka">PPN dapat dikreditkan</th>
+                  <th className="angka">PPN bisa dikreditkan</th>
                 </tr>
               </thead>
               <tbody>
@@ -365,7 +365,8 @@ export function PembelianPage({ entityId, isPKP }: { entityId: string; isPKP: bo
                   <th>Invoice</th>
                   <th>Faktur</th>
                   <th className="angka">PPN</th>
-                  <th className="angka">Total</th>
+                  <th className="angka">Dibayar</th>
+                  <th className="angka">Masuk biaya persediaan</th>
                   <th>Bayar</th>
                 </tr>
               </thead>
@@ -383,6 +384,20 @@ export function PembelianPage({ entityId, isPKP }: { entityId: string; isPKP: bo
                     </td>
                     <td className="angka">{formatIDR(p.ppn_idr)}</td>
                     <td className="angka">{formatIDR(p.total_idr)}</td>
+                    {/* The point of the whole screen: two invoices for the same
+                        goods at the same price cost different amounts, and the
+                        difference is whether the faktur arrived (INV-9). */}
+                    <td className="angka">
+                      {formatIDR(p.inventory_cost_idr)}
+                      {p.inventory_cost_idr !== p.total_idr && (
+                        <>
+                          <br />
+                          <small className="catatan">
+                            PPN {formatIDR(p.creditable_ppn_idr)} tidak jadi biaya
+                          </small>
+                        </>
+                      )}
+                    </td>
                     <td>
                       {p.is_credit ? `Kredit${p.due_date ? ` s/d ${p.due_date}` : ''}` : 'Tunai'}
                     </td>
